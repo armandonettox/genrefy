@@ -20,16 +20,58 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-  .stApp { background-color: #F8F9FA; color: #171717; }
-  h1, h2, h3 { color: #1E3A6B; }
-  .stButton > button { background-color: #1E3A6B; color: #F8F9FA; border: none; }
-  .stButton > button:hover { background-color: #5B9BD5; }
-  .stTabs [data-baseweb="tab-highlight"] { background-color: #00B4A6; }
-  .stTabs [data-baseweb="tab"] { color: #1E3A6B; }
+  /* Botoes: pill shape verde Spotify */
+  .stButton > button {
+    background-color: #1DB954;
+    color: #000000;
+    border: none;
+    border-radius: 500px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 10px 28px;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+  }
+  .stButton > button:hover {
+    background-color: #1ed760;
+    transform: scale(1.03);
+    border: none;
+  }
+  .stButton > button:active { transform: scale(0.98); }
+
+  /* Tabs */
+  .stTabs [data-baseweb="tab-list"] { border-bottom: 1px solid #282828; gap: 4px; }
+  .stTabs [data-baseweb="tab-highlight"] { background-color: #1DB954; }
+  .stTabs [data-baseweb="tab"] { color: #B3B3B3; font-weight: 700; letter-spacing: 0.5px; }
+  .stTabs [aria-selected="true"] { color: #FFFFFF; }
+
+  /* Inputs */
+  .stTextInput input {
+    background-color: #282828 !important;
+    border: 1px solid #404040 !important;
+    color: #FFFFFF !important;
+    border-radius: 4px !important;
+  }
+  .stTextInput input:focus { border-color: #FFFFFF !important; }
+
+  /* Link button (login) */
+  .stLinkButton a {
+    background-color: #1DB954 !important;
+    color: #000000 !important;
+    border-radius: 500px !important;
+    font-weight: 700 !important;
+    padding: 12px 32px !important;
+  }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🎵 genrefy")
+st.markdown("""
+<div style="display:flex;align-items:center;gap:12px;padding:8px 0 16px 0">
+  <svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 24 24" fill="#1DB954">
+    <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+  </svg>
+  <span style="font-size:2.2rem;font-weight:900;color:#FFFFFF;letter-spacing:-1px">genrefy</span>
+</div>
+""", unsafe_allow_html=True)
 
 
 def load_playlists() -> list[dict]:
@@ -84,8 +126,22 @@ if "sp" not in st.session_state:
 sp = st.session_state.sp
 playlists = st.session_state.playlists
 
+def do_logout():
+    cache_path = os.getenv('SPOTIFY_TOKEN_CACHE', '.spotify_cache')
+    if os.path.exists(cache_path):
+        os.remove(cache_path)
+    for key in ['sp', 'auth_manager', 'playlists', 'auth_error']:
+        st.session_state.pop(key, None)
+    st.rerun()
+
+
 user = sp.me()
-st.success(f"Conectado ao Spotify como **{user['display_name']}**")
+col_user, col_logout = st.columns([8, 1])
+with col_user:
+    st.success(f"Conectado ao Spotify como **{user['display_name']}**")
+with col_logout:
+    if st.button("Sair", key="logout"):
+        do_logout()
 
 tab_reload, tab_check, tab_info, tab_genres = st.tabs(
     ["Reload", "Check", "Info", "Genres"]
