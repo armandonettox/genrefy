@@ -1,3 +1,4 @@
+import base64
 import json
 import logging
 import os
@@ -5,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+from PIL import Image
 
 from commands.check import run_check
 from commands.genres import run_genres
@@ -19,9 +21,17 @@ from spotify_client import (
 
 logging.basicConfig(level=logging.INFO)
 
+_ASSETS = Path(__file__).parent / 'assets'
+
+def _img_b64(filename: str) -> str:
+    with open(_ASSETS / filename, 'rb') as f:
+        return base64.b64encode(f.read()).decode()
+
+_LOGO_B64 = _img_b64('logo-2.png')
+
 st.set_page_config(
     page_title="genrefy",
-    page_icon="🎵",
+    page_icon=Image.open(_ASSETS / 'favicon.png'),
     layout="centered",
 )
 
@@ -101,12 +111,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("""
-<div style="display:flex;align-items:center;justify-content:center;gap:12px;padding:8px 0 24px 0">
-  <svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 24 24" fill="#1DB954">
-    <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
-  </svg>
-  <span style="font-size:2.2rem;font-weight:900;color:#FFFFFF;letter-spacing:-1px">genrefy</span>
+st.markdown(f"""
+<div style="display:flex;align-items:center;justify-content:center;padding:8px 0 24px 0">
+  <img src="data:image/png;base64,{_LOGO_B64}" style="height:64px;object-fit:contain">
 </div>
 """, unsafe_allow_html=True)
 

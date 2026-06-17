@@ -1,4 +1,4 @@
-# genrefy
+![Genrefy](assets/logo.png)
 
 Aplicacao que le as musicas curtidas do Spotify e as distribui automaticamente em playlists com base no genero dos artistas.
 
