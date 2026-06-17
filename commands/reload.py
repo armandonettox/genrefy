@@ -28,6 +28,9 @@ def run_reload(sp, playlists, progress_callback=None) -> list[str]:
 
     decorated_tracks = decorate_artist_genres(sp, tracks)
 
+    no_genre = sum(1 for t in decorated_tracks if not t['genres'])
+    log(f'{no_genre}/{len(decorated_tracks)} tracks sem genero (artistas sem dados no Spotify)')
+
     log(f'Populating {len(playlists)} playlist(s)')
 
     for playlist in playlists:
@@ -40,17 +43,21 @@ def run_reload(sp, playlists, progress_callback=None) -> list[str]:
         if current.get('total', 0) > 0:
             _remove_all_playlist_tracks(sp, pid)
 
+        # Cria copia por playlist para evitar que aoverride de uma playlist
+        # contamine as demais (genres sao mutados em-place na logica sem copia)
+        playlist_tracks = [{'track': t['track'], 'genres': list(t['genres'])} for t in decorated_tracks]
+
         # Aplica aoverride: injeta o primeiro genero da playlist nas tracks dos artistas listados
         # Isso acontece ANTES da filtragem — nao e um bypass
         if playlist.get('aoverride'):
-            for track in decorated_tracks:
+            for track in playlist_tracks:
                 artist_name = track['track']['artists'][0]['name']
                 if artist_name in playlist['aoverride']:
                     track['genres'].append(playlist['genres'][0])
 
         # Filtra: mantém apenas tracks que tenham pelo menos um genero da playlist
         filtered = [
-            t for t in decorated_tracks
+            t for t in playlist_tracks
             if any(g in playlist['genres'] for g in t['genres'])
         ]
 
@@ -60,6 +67,10 @@ def run_reload(sp, playlists, progress_callback=None) -> list[str]:
                 t for t in filtered
                 if not any(g in playlist['ngenres'] for g in t['genres'])
             ]
+
+        log(f"  {len(filtered)} tracks corresponderam aos filtros")
+        if not filtered:
+            log(f"  AVISO: nenhuma track correspondeu aos generos desta playlist")
 
         # Ordena por nome do artista, e dentro do mesmo artista por nome do album
         filtered.sort(key=lambda t: (
@@ -73,7 +84,7 @@ def run_reload(sp, playlists, progress_callback=None) -> list[str]:
             chunk = filtered[i:i + chunk_size]
             if not chunk:
                 break
-            log(f'Populating chunk {i}-{i + chunk_size}...')
+            log(f'  Adicionando chunk {i}–{i + chunk_size}...')
             sp.playlist_add_items(pid, [t['track']['uri'] for t in chunk])
 
     log('Successfully completed main loop')
