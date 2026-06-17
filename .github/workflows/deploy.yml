@@ -17,6 +17,8 @@ jobs:
           cd ~/genrefy
           git pull
           podman build -t genrefy_genrefy:latest .
+          export XDG_RUNTIME_DIR=/run/user/$(id -u)
+          export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus
           systemctl --user restart genrefy.service
           sleep 10
           curl -sf http://localhost:8005 > /dev/null && echo "OK"
