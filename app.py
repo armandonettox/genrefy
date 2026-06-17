@@ -557,17 +557,30 @@ with tab_config:
                     v.strip() for v in raw.split('\n') if v.strip()
                 ]
 
+    unlinked_count = sum(
+        1 for i, p in enumerate(st.session_state.config_playlists)
+        if (st.session_state.get(f"cfg_{i}_id") or p.get('id', '')) not in playlist_options
+    )
+    if unlinked_count:
+        st.warning(
+            f"{unlinked_count} playlist(s) não encontrada(s) na sua conta do Spotify. "
+            "Selecione as playlists corretas abaixo e clique em Salvar."
+        )
+
     for i, playlist in enumerate(st.session_state.config_playlists):
-        label = _playlist_name(playlist.get('id', ''), playlist.get('name', '')) or f"Playlist {i + 1}"
-        with st.expander(label, expanded=False):
-            current_id = playlist.get('id', '')
+        current_id = st.session_state.get(f"cfg_{i}_id") or playlist.get('id', '')
+        found = current_id in playlist_options
+        config_name = playlist.get('name', '') or f"Playlist {i + 1}"
+        label = (_playlist_name(current_id, config_name) if found else f"⚠ {config_name}") or f"Playlist {i + 1}"
+        with st.expander(label, expanded=not found):
             opts = list(playlist_options.keys())
-            idx = opts.index(current_id) if current_id in opts else 0
+            idx = opts.index(current_id) if found else None
             st.selectbox(
                 "Playlist do Spotify",
                 options=opts,
                 format_func=lambda x, po=playlist_options: po.get(x, x),
                 index=idx,
+                placeholder="Selecione a playlist...",
                 key=f"cfg_{i}_id",
             )
 
