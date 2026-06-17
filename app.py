@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from PIL import Image
 
 from commands.check import run_check
@@ -30,7 +31,7 @@ def _img_b64(filename: str) -> str:
 _LOGO_B64 = _img_b64('logo-2.png')
 
 st.set_page_config(
-    page_title="genrefy",
+    page_title="Genrefy",
     page_icon=Image.open(_ASSETS / 'favicon.png'),
     layout="centered",
 )
@@ -110,6 +111,22 @@ st.markdown("""
   .stTabs [data-testid="stTabsContent"] { padding-top: 1.5rem; }
 </style>
 """, unsafe_allow_html=True)
+
+components.html("""
+<script>
+  (function() {
+    const TITLE = "Genrefy";
+    function lock() {
+      if (parent.document.title !== TITLE) parent.document.title = TITLE;
+    }
+    lock();
+    new MutationObserver(lock).observe(
+      parent.document.querySelector("head"),
+      { subtree: true, childList: true, characterData: true }
+    );
+  })();
+</script>
+""", height=0)
 
 st.markdown(f"""
 <div style="display:flex;align-items:center;justify-content:center;padding:8px 0 24px 0">
