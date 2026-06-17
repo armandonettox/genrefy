@@ -15,7 +15,7 @@ jobs:
       - name: Build e reinicia container
         run: |
           # build usando o codigo do commit atual com cache de layers
-          podman build --layers --cache-from genrefy_genrefy:latest -t genrefy_genrefy:latest $GITHUB_WORKSPACE
+          podman build --layers -t genrefy_genrefy:latest $GITHUB_WORKSPACE
 
           # variaveis necessarias para o systemctl --user funcionar no runner
           export XDG_RUNTIME_DIR=/run/user/$(id -u)
