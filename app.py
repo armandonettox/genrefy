@@ -2,6 +2,7 @@ import json
 import logging
 import os
 
+import pandas as pd
 import streamlit as st
 
 from commands.check import run_check
@@ -199,6 +200,15 @@ tab_reload, tab_check, tab_info, tab_genres = st.tabs(
     ["Reload", "Check", "Info", "Genres"]
 )
 
+# --- helpers de UX compartilhados ---
+def _confirm_buttons(key_prefix):
+    """Retorna (confirmar, cancelar) usando colunas centradas."""
+    _, c1, c2, _ = st.columns([3, 1, 1, 3])
+    confirmar = c1.button("Confirmar", type="primary", key=f"{key_prefix}_confirmar")
+    cancelar  = c2.button("Cancelar",                  key=f"{key_prefix}_cancelar")
+    return confirmar, cancelar
+
+# ── RELOAD ────────────────────────────────────────────────────────────────────
 with tab_reload:
     st.subheader("Reload")
     st.write(
@@ -216,9 +226,7 @@ with tab_reload:
             st.markdown(f"- {p['name']}")
         st.warning("Todas as faixas dessas playlists serão removidas e readicionadas.")
 
-        c1, c2, _ = st.columns([1, 1, 4])
-        confirmar = c1.button("Confirmar", type="primary")
-        cancelar = c2.button("Cancelar")
+        confirmar, cancelar = _confirm_buttons("reload")
 
         if cancelar:
             st.session_state.reload_pending = False
@@ -241,27 +249,52 @@ with tab_reload:
                 for nome, contagem in summary.items():
                     st.markdown(f"- **{nome}**: {contagem} faixas")
 
+# ── CHECK ─────────────────────────────────────────────────────────────────────
 with tab_check:
     st.subheader("Check")
-    st.write("Verifica quais artistas das suas músicas curtidas não têm mapeamento em nenhuma playlist.")
+    st.write(
+        "Verifica quais artistas das suas músicas curtidas não têm mapeamento "
+        "em nenhuma playlist configurada."
+    )
 
-    if st.button("Verificar Artistas Sem Mapeamento"):
-        with st.spinner("Verificando..."):
-            try:
-                missing = run_check(sp, playlists)
+    if not st.session_state.get("check_pending"):
+        if st.button("Verificar Artistas"):
+            st.session_state.check_pending = True
+            st.rerun()
+    else:
+        st.info(
+            "Vai buscar todas as suas músicas curtidas e cruzar os gêneros de cada artista "
+            "com as playlists configuradas. Pode demorar alguns minutos."
+        )
+        confirmar, cancelar = _confirm_buttons("check")
+
+        if cancelar:
+            st.session_state.check_pending = False
+            st.rerun()
+
+        if confirmar:
+            st.session_state.check_pending = False
+            missing = None
+            with st.status("Verificando artistas...", expanded=True) as status:
+                try:
+                    missing = run_check(sp, playlists)
+                    status.update(label="Verificação concluída!", state="complete", expanded=False)
+                except Exception as exc:
+                    status.update(label="Erro na verificação", state="error")
+                    st.error(f"Detalhe: {exc}")
+
+            if missing is not None:
                 if not missing:
                     st.success("Todos os artistas têm gênero mapeado em pelo menos uma playlist.")
                 else:
                     st.warning(f"{len(missing)} artista(s) sem mapeamento encontrado(s).")
-                    import pandas as pd
                     df = pd.DataFrame([
                         {"Nome": a["name"], "Gêneros": ", ".join(a["genres"])}
                         for a in missing
                     ])
                     st.dataframe(df, use_container_width=True)
-            except Exception as exc:
-                st.error(f"Erro ao verificar artistas: {exc}")
 
+# ── INFO ──────────────────────────────────────────────────────────────────────
 with tab_info:
     st.subheader("Info")
     st.write("Consulta os gêneros de um artista pelo ID ou URL do Spotify.")
@@ -271,23 +304,42 @@ with tab_info:
         placeholder="Ex: 3TVXtAsR1Inumwj472S9r4 ou https://open.spotify.com/artist/...",
     )
 
-    if st.button("Buscar Gêneros"):
-        if not artist_input.strip():
-            st.warning("Informe um Artist ID ou URL do Spotify.")
-        else:
-            with st.spinner("Buscando..."):
-                try:
-                    result = run_info(sp, artist_input.strip())
-                    st.write(f"**Artista:** {result['name']}")
-                    if result["genres"]:
-                        st.write("**Gêneros:**")
-                        for genre in result["genres"]:
-                            st.write(f"- {genre}")
-                    else:
-                        st.info("Nenhum gênero encontrado para este artista.")
-                except Exception as exc:
-                    st.error(f"Erro ao buscar artista: {exc}")
+    if not st.session_state.get("info_pending"):
+        if st.button("Buscar Gêneros"):
+            if not artist_input.strip():
+                st.warning("Informe um Artist ID ou URL do Spotify.")
+            else:
+                st.session_state.info_pending = True
+                st.session_state.info_artist = artist_input.strip()
+                st.rerun()
+    else:
+        artista_id = st.session_state.info_artist
+        st.info(f"Vai buscar os gêneros do artista: `{artista_id}`")
+        confirmar, cancelar = _confirm_buttons("info")
 
+        if cancelar:
+            st.session_state.info_pending = False
+            st.rerun()
+
+        if confirmar:
+            st.session_state.info_pending = False
+            result = None
+            with st.status("Buscando artista...", expanded=True) as status:
+                try:
+                    result = run_info(sp, artista_id)
+                    status.update(label=f"Artista encontrado!", state="complete", expanded=False)
+                except Exception as exc:
+                    status.update(label="Erro ao buscar artista", state="error")
+                    st.error(f"Detalhe: {exc}")
+
+            if result:
+                st.markdown(f"### {result['name']}")
+                if result["genres"]:
+                    st.markdown(" · ".join(f"`{g}`" for g in result["genres"]))
+                else:
+                    st.info("Nenhum gênero encontrado para este artista.")
+
+# ── GENRES ────────────────────────────────────────────────────────────────────
 with tab_genres:
     st.subheader("Genres")
     st.write(
@@ -295,18 +347,39 @@ with tab_genres:
         "ordenados alfabeticamente."
     )
 
-    if st.button("Gerar CSV"):
-        with st.spinner("Gerando CSV..."):
-            try:
-                output_path = run_genres(sp)
+    if not st.session_state.get("genres_pending"):
+        if st.button("Gerar CSV"):
+            st.session_state.genres_pending = True
+            st.rerun()
+    else:
+        st.info(
+            "Vai buscar todas as suas músicas curtidas, identificar os gêneros de cada artista "
+            "e gerar um CSV para download. Pode demorar alguns minutos."
+        )
+        confirmar, cancelar = _confirm_buttons("genres")
+
+        if cancelar:
+            st.session_state.genres_pending = False
+            st.rerun()
+
+        if confirmar:
+            st.session_state.genres_pending = False
+            output_path = None
+            with st.status("Gerando CSV...", expanded=True) as status:
+                try:
+                    output_path = run_genres(sp)
+                    status.update(label="CSV gerado!", state="complete", expanded=False)
+                except Exception as exc:
+                    status.update(label="Erro ao gerar CSV", state="error")
+                    st.error(f"Detalhe: {exc}")
+
+            if output_path:
                 with open(output_path, encoding="utf-8") as f:
                     csv_bytes = f.read().encode("utf-8")
-                st.success(f"CSV gerado: {output_path}")
+                st.success("CSV gerado com sucesso!")
                 st.download_button(
                     label="Baixar CSV",
                     data=csv_bytes,
-                    file_name="output.csv",
+                    file_name="artists_genres.csv",
                     mime="text/csv",
                 )
-            except Exception as exc:
-                st.error(f"Erro ao gerar CSV: {exc}")
