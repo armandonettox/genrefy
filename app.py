@@ -79,6 +79,12 @@ st.markdown("""
     padding-bottom: 3rem !important;
     max-width: 860px !important;
   }
+
+  /* Icone de logout no banner */
+  .logout-btn:hover {
+    color: #FFFFFF !important;
+    background: rgba(255,255,255,0.12) !important;
+  }
 </style>
 """, unsafe_allow_html=True)
 
@@ -152,26 +158,36 @@ def do_logout():
         st.session_state.pop(key, None)
     st.rerun()
 
+if st.query_params.get("action") == "logout":
+    st.query_params.clear()
+    do_logout()
 
 user = sp.me()
 avatar = user.get('images', [{}])[0].get('url', '') if user.get('images') else ''
 avatar_html = f'<img src="{avatar}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0">' if avatar else ''
 
+logout_icon = """<svg xmlns="http://www.w3.org/2000/svg" height="20" width="20" viewBox="0 0 24 24" fill="currentColor">
+  <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
+</svg>"""
+
 st.markdown(f"""
 <div style="display:flex;align-items:center;justify-content:space-between;
             background:#1a3a24;border:1px solid #1DB954;border-radius:8px;
-            padding:10px 16px;margin-bottom:8px">
+            padding:10px 16px;margin-bottom:16px">
   <div style="display:flex;align-items:center;gap:10px">
     {avatar_html}
     <span style="color:#FFFFFF;font-size:0.95rem">
       Conectado ao Spotify como <strong>{user['display_name']}</strong>
     </span>
   </div>
+  <a href="?action=logout" title="Sair" class="logout-btn"
+     style="color:#B3B3B3;text-decoration:none;display:flex;align-items:center;
+            padding:7px;border-radius:50%;transition:color 0.15s,background 0.15s;
+            background:rgba(255,255,255,0.05)">
+    {logout_icon}
+  </a>
 </div>
 """, unsafe_allow_html=True)
-
-if st.button("Sair", key="logout"):
-    do_logout()
 
 tab_reload, tab_check, tab_info, tab_genres = st.tabs(
     ["Reload", "Check", "Info", "Genres"]
