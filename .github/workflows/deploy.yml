@@ -17,15 +17,6 @@ jobs:
           cd ~/genrefy
           git pull
           podman build -t genrefy_genrefy:latest .
-          podman stop genrefy || true
-          podman rm -f genrefy || true
-          podman run -d \
-            --name genrefy \
-            --restart unless-stopped \
-            -p 8005:8501 \
-            --env-file .env \
-            -v spotify-cache:/app/cache \
-            -v genrefy-config:/app/user_config \
-            genrefy_genrefy:latest
+          systemctl --user restart genrefy.service
           sleep 10
           curl -sf http://localhost:8005 > /dev/null && echo "OK"
