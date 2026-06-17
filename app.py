@@ -241,8 +241,16 @@ if 'spotify_playlists' not in st.session_state:
 spotify_playlists = st.session_state.spotify_playlists
 _playlist_name_map = {p['id']: p['name'] for p in spotify_playlists}
 
-def _playlist_name(pid: str) -> str:
-    return _playlist_name_map.get(pid, pid)
+# Busca nomes das playlists do config que nao aparecem na lista do usuario
+_missing_ids = [p['id'] for p in playlists if p.get('id') and p['id'] not in _playlist_name_map]
+for _pid in _missing_ids:
+    try:
+        _playlist_name_map[_pid] = sp.playlist(_pid, fields='name')['name']
+    except Exception:
+        pass
+
+def _playlist_name(pid: str, fallback: str = '') -> str:
+    return _playlist_name_map.get(pid, fallback)
 
 def do_logout():
     cache_path = os.getenv('SPOTIFY_TOKEN_CACHE', '.spotify_cache')
@@ -312,7 +320,7 @@ with tab_sync:
                 )
             with col_content:
                 name_style = "color:#FFFFFF;font-weight:700;font-size:1rem" if enabled else "color:#555;text-decoration:line-through;font-size:1rem"
-                st.markdown(f'<span style="{name_style}">{_playlist_name(p["id"])}</span>', unsafe_allow_html=True)
+                st.markdown(f'<span style="{name_style}">{_playlist_name(p["id"], p.get("name", p["id"]))}</span>', unsafe_allow_html=True)
                 c1, c2, c3 = st.columns(3)
                 c1.checkbox("Gêneros", key=f"sync_g_{i}", value=bool(p.get("genres")), disabled=not enabled)
                 c2.checkbox("Excluir", key=f"sync_ng_{i}", value=bool(p.get("ngenres")), disabled=not enabled)
@@ -339,7 +347,7 @@ with tab_sync:
 
         st.markdown("**Playlists que serão sincronizadas:**")
         for p in selected:
-            st.markdown(f"- {_playlist_name(p['id'])}")
+            st.markdown(f"- {_playlist_name(p['id'], p.get('name', p['id']))}")
         st.warning("Todas as faixas dessas playlists serão removidas e readicionadas.")
 
         confirmar, cancelar = _confirm_buttons("reload")
@@ -550,7 +558,7 @@ with tab_config:
                 ]
 
     for i, playlist in enumerate(st.session_state.config_playlists):
-        label = _playlist_name(playlist.get('id', '')) or f"Playlist {i + 1}"
+        label = _playlist_name(playlist.get('id', ''), playlist.get('name', '')) or f"Playlist {i + 1}"
         with st.expander(label, expanded=False):
             current_id = playlist.get('id', '')
             opts = list(playlist_options.keys())
