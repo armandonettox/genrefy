@@ -291,8 +291,8 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-tab_sync, tab_check, tab_info, tab_genres, tab_config = st.tabs(
-    ["Sincronizar", "Artistas", "Buscar", "Exportar", "Configurações"]
+tab_sync, tab_check, tab_info, tab_genres = st.tabs(
+    ["Sincronizar", "Artistas", "Buscar", "Exportar"]
 )
 
 # --- helpers de UX compartilhados ---
@@ -305,45 +305,135 @@ def _confirm_buttons(key_prefix):
 
 # ── SINCRONIZAR ───────────────────────────────────────────────────────────────
 with tab_sync:
-    st.subheader("Sincronizar")
-    st.write("Escolha quais playlists sincronizar e quais filtros aplicar.")
+    if 'config_playlists' not in st.session_state:
+        st.session_state.config_playlists = [
+            {
+                'id': p.get('id', ''),
+                'name': p.get('name', ''),
+                'genres': list(p.get('genres', [])),
+                'ngenres': list(p.get('ngenres', [])),
+                'aoverride': list(p.get('aoverride', [])),
+            }
+            for p in load_playlists()
+        ]
+
+    playlist_options = _playlist_name_map
+
+    def _sync_widgets():
+        for i in range(len(st.session_state.config_playlists)):
+            pid = st.session_state.get(f"cfg_{i}_id", st.session_state.config_playlists[i].get('id', ''))
+            st.session_state.config_playlists[i]['id'] = pid
+            st.session_state.config_playlists[i]['name'] = playlist_options.get(pid, pid)
+            for field in ('genres', 'ngenres', 'aoverride'):
+                default = "\n".join(st.session_state.config_playlists[i].get(field, []))
+                raw = st.session_state.get(f"cfg_{i}_{field}", default)
+                st.session_state.config_playlists[i][field] = [
+                    v.strip() for v in raw.split('\n') if v.strip()
+                ]
 
     if not st.session_state.get("reload_pending"):
-        for i, p in enumerate(playlists):
-            col_toggle, col_content = st.columns([1, 7])
-            with col_toggle:
-                enabled = st.toggle(
-                    "Ativa",
-                    key=f"sync_en_{i}",
-                    value=True,
-                    label_visibility="collapsed",
-                )
-            with col_content:
-                name_style = "color:#FFFFFF;font-weight:700;font-size:1rem" if enabled else "color:#555;text-decoration:line-through;font-size:1rem"
-                st.markdown(f'<span style="{name_style}">{_playlist_name(p["id"], p.get("name", p["id"]))}</span>', unsafe_allow_html=True)
-                c1, c2, c3 = st.columns(3)
-                c1.checkbox("Gêneros", key=f"sync_g_{i}", value=bool(p.get("genres")), disabled=not enabled)
-                c2.checkbox("Excluir", key=f"sync_ng_{i}", value=bool(p.get("ngenres")), disabled=not enabled)
-                c3.checkbox("Forçar artistas", key=f"sync_ao_{i}", value=bool(p.get("aoverride")), disabled=not enabled)
-            st.divider()
+        unlinked_count = sum(
+            1 for i, p in enumerate(st.session_state.config_playlists)
+            if (st.session_state.get(f"cfg_{i}_id") or p.get('id', '')) not in playlist_options
+        )
+        if unlinked_count:
+            st.warning(
+                f"{unlinked_count} playlist(s) não encontrada(s) na sua conta do Spotify. "
+                "Selecione as playlists corretas abaixo e clique em Salvar."
+            )
 
-        if st.button("Sincronizar"):
-            selection = {
-                i: {
-                    "enabled": st.session_state.get(f"sync_en_{i}", True),
-                    "use_genres": st.session_state.get(f"sync_g_{i}", bool(p.get("genres"))),
-                    "use_ngenres": st.session_state.get(f"sync_ng_{i}", bool(p.get("ngenres"))),
-                    "use_aoverride": st.session_state.get(f"sync_ao_{i}", bool(p.get("aoverride"))),
-                }
-                for i, p in enumerate(playlists)
-            }
-            st.session_state.sync_selection = selection
+        for i, playlist in enumerate(st.session_state.config_playlists):
+            current_id = st.session_state.get(f"cfg_{i}_id") or playlist.get('id', '')
+            found = current_id in playlist_options
+            label = _playlist_name(current_id, '') if found else f"⚠ Playlist {i + 1}"
+            label = label or f"Playlist {i + 1}"
+            with st.expander(label, expanded=not found):
+                st.toggle("Incluir na sincronização", key=f"sync_en_{i}", value=True)
+                opts = list(playlist_options.keys())
+                idx = opts.index(current_id) if found else None
+                st.selectbox(
+                    "Playlist do Spotify",
+                    options=opts,
+                    format_func=lambda x, po=playlist_options: po.get(x, x),
+                    index=idx,
+                    placeholder="Selecione a playlist...",
+                    key=f"cfg_{i}_id",
+                )
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.text_area(
+                        "Gêneros",
+                        value="\n".join(playlist.get('genres', [])),
+                        key=f"cfg_{i}_genres",
+                        height=200,
+                        help="Um gênero por linha. Tracks cujo artista tenha esse gênero entram aqui.",
+                    )
+                with col2:
+                    st.text_area(
+                        "Excluir (ngenres)",
+                        value="\n".join(playlist.get('ngenres', [])),
+                        key=f"cfg_{i}_ngenres",
+                        height=200,
+                        help="Gêneros excluídos. Têm precedência absoluta sobre a lista de gêneros.",
+                    )
+                with col3:
+                    st.text_area(
+                        "Forçar artistas (aoverride)",
+                        value="\n".join(playlist.get('aoverride', [])),
+                        key=f"cfg_{i}_aoverride",
+                        height=200,
+                        help="Nome exato do artista. Entra aqui independente do gênero.",
+                    )
+                if st.button("Remover playlist", key=f"cfg_remove_{i}"):
+                    _sync_widgets()
+                    st.session_state.config_playlists.pop(i)
+                    for field in ('id', 'genres', 'ngenres', 'aoverride'):
+                        st.session_state.pop(f"cfg_{i}_{field}", None)
+                    st.rerun()
+
+        st.divider()
+
+        _, c1, c2, c3, c4, _ = st.columns([2, 1, 1, 1, 1, 2])
+
+        if c1.button("+ Adicionar", key="cfg_add"):
+            _sync_widgets()
+            first = spotify_playlists[0] if spotify_playlists else {'id': '', 'name': ''}
+            st.session_state.config_playlists.append({
+                'id': first['id'],
+                'name': first.get('name', ''),
+                'genres': [],
+                'ngenres': [],
+                'aoverride': [],
+            })
+            st.rerun()
+
+        if c2.button("Descartar", key="cfg_discard"):
+            for key in list(st.session_state.keys()):
+                if key.startswith('cfg_'):
+                    del st.session_state[key]
+            st.session_state.pop('config_playlists', None)
+            st.rerun()
+
+        if c3.button("Salvar", key="cfg_save"):
+            _sync_widgets()
+            save_playlists_to_volume(st.session_state.config_playlists)
+            st.session_state.playlists = list(st.session_state.config_playlists)
+            st.success("Configuração salva!")
+
+        if c4.button("Sincronizar", type="primary", key="cfg_sync"):
+            _sync_widgets()
+            save_playlists_to_volume(st.session_state.config_playlists)
+            st.session_state.playlists = list(st.session_state.config_playlists)
+            enabled = [
+                p for i, p in enumerate(st.session_state.config_playlists)
+                if st.session_state.get(f"sync_en_{i}", True)
+            ]
+            st.session_state.sync_selection = enabled
             st.session_state.reload_pending = True
             st.rerun()
 
     else:
-        selection = st.session_state.get("sync_selection", {})
-        selected = [playlists[i] for i, v in selection.items() if v.get("enabled")]
+        selected = st.session_state.get("sync_selection", [])
 
         st.markdown("**Playlists que serão sincronizadas:**")
         for p in selected:
@@ -358,23 +448,9 @@ with tab_sync:
 
         if confirmar:
             st.session_state.reload_pending = False
-            modified_playlists = []
-            for i, p in enumerate(playlists):
-                sel = selection.get(i, {})
-                if not sel.get("enabled", True):
-                    continue
-                mp = dict(p)
-                if not sel.get("use_genres", True):
-                    mp["genres"] = []
-                if not sel.get("use_ngenres", True):
-                    mp["ngenres"] = []
-                if not sel.get("use_aoverride", True):
-                    mp["aoverride"] = []
-                modified_playlists.append(mp)
-
             with st.status("Sincronizando...", expanded=True) as status:
                 try:
-                    _, summary = run_reload(sp, modified_playlists, progress_callback=status.write)
+                    _, summary = run_reload(sp, selected, progress_callback=status.write)
                     status.update(label="Sincronização concluída!", state="complete", expanded=False)
                 except Exception as exc:
                     status.update(label="Erro durante a sincronização", state="error")
@@ -522,126 +598,3 @@ with tab_genres:
                     mime="text/csv",
                 )
 
-# ── CONFIGURAÇÕES ─────────────────────────────────────────────────────────────
-with tab_config:
-    st.subheader("Configurações")
-    st.write(
-        "Selecione as playlists do Spotify e configure quais gêneros vão para cada uma. "
-        "A configuração é salva em volume e persiste entre deploys."
-    )
-
-    # Inicializa rascunho de config no session state
-    if 'config_playlists' not in st.session_state:
-        st.session_state.config_playlists = [
-            {
-                'id': p.get('id', ''),
-                'name': p.get('name', ''),
-                'genres': list(p.get('genres', [])),
-                'ngenres': list(p.get('ngenres', [])),
-                'aoverride': list(p.get('aoverride', [])),
-            }
-            for p in load_playlists()
-        ]
-
-    playlist_options = _playlist_name_map
-
-    def _sync_widgets():
-        for i in range(len(st.session_state.config_playlists)):
-            pid = st.session_state.get(f"cfg_{i}_id", st.session_state.config_playlists[i].get('id', ''))
-            st.session_state.config_playlists[i]['id'] = pid
-            st.session_state.config_playlists[i]['name'] = playlist_options.get(pid, pid)
-            for field in ('genres', 'ngenres', 'aoverride'):
-                default = "\n".join(st.session_state.config_playlists[i].get(field, []))
-                raw = st.session_state.get(f"cfg_{i}_{field}", default)
-                st.session_state.config_playlists[i][field] = [
-                    v.strip() for v in raw.split('\n') if v.strip()
-                ]
-
-    unlinked_count = sum(
-        1 for i, p in enumerate(st.session_state.config_playlists)
-        if (st.session_state.get(f"cfg_{i}_id") or p.get('id', '')) not in playlist_options
-    )
-    if unlinked_count:
-        st.warning(
-            f"{unlinked_count} playlist(s) não encontrada(s) na sua conta do Spotify. "
-            "Selecione as playlists corretas abaixo e clique em Salvar."
-        )
-
-    for i, playlist in enumerate(st.session_state.config_playlists):
-        current_id = st.session_state.get(f"cfg_{i}_id") or playlist.get('id', '')
-        found = current_id in playlist_options
-        label = _playlist_name(current_id, '') if found else f"⚠ Playlist {i + 1}"
-        label = label or f"Playlist {i + 1}"
-        with st.expander(label, expanded=not found):
-            opts = list(playlist_options.keys())
-            idx = opts.index(current_id) if found else None
-            st.selectbox(
-                "Playlist do Spotify",
-                options=opts,
-                format_func=lambda x, po=playlist_options: po.get(x, x),
-                index=idx,
-                placeholder="Selecione a playlist...",
-                key=f"cfg_{i}_id",
-            )
-
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.text_area(
-                    "Gêneros",
-                    value="\n".join(playlist.get('genres', [])),
-                    key=f"cfg_{i}_genres",
-                    height=200,
-                    help="Um gênero por linha. Tracks cujo artista tenha esse gênero entram aqui.",
-                )
-            with col2:
-                st.text_area(
-                    "Excluir (ngenres)",
-                    value="\n".join(playlist.get('ngenres', [])),
-                    key=f"cfg_{i}_ngenres",
-                    height=200,
-                    help="Gêneros excluídos. Têm precedência absoluta sobre a lista de gêneros.",
-                )
-            with col3:
-                st.text_area(
-                    "Forçar artistas (aoverride)",
-                    value="\n".join(playlist.get('aoverride', [])),
-                    key=f"cfg_{i}_aoverride",
-                    height=200,
-                    help="Nome exato do artista. Entra aqui independente do gênero.",
-                )
-
-            if st.button("Remover playlist", key=f"cfg_remove_{i}"):
-                _sync_widgets()
-                st.session_state.config_playlists.pop(i)
-                for field in ('id', 'genres', 'ngenres', 'aoverride'):
-                    st.session_state.pop(f"cfg_{i}_{field}", None)
-                st.rerun()
-
-    st.divider()
-
-    _, c1, c2, c3, _ = st.columns([2, 1, 1, 1, 2])
-
-    if c1.button("+ Adicionar", key="cfg_add"):
-        _sync_widgets()
-        first = spotify_playlists[0] if spotify_playlists else {'id': '', 'name': 'Nova Playlist'}
-        st.session_state.config_playlists.append({
-            'id': first['id'],
-            'name': first['name'],
-            'genres': [],
-            'ngenres': [],
-            'aoverride': [],
-        })
-        st.rerun()
-
-    if c2.button("Descartar", key="cfg_discard"):
-        for key in list(st.session_state.keys()):
-            if key.startswith('cfg_'):
-                del st.session_state[key]
-        st.session_state.pop('config_playlists', None)
-        st.rerun()
-
-    if c3.button("Salvar", type="primary", key="cfg_save"):
-        _sync_widgets()
-        save_playlists_to_volume(st.session_state.config_playlists)
-        st.session_state.playlists = list(st.session_state.config_playlists)
-        st.success("Configuração salva! Será usada no próximo Reload.")
