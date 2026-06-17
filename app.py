@@ -143,12 +143,24 @@ def do_logout():
 
 
 user = sp.me()
-col_user, col_logout = st.columns([8, 1])
-with col_user:
-    st.success(f"Conectado ao Spotify como **{user['display_name']}**")
-with col_logout:
-    if st.button("Sair", key="logout"):
-        do_logout()
+avatar = user.get('images', [{}])[0].get('url', '') if user.get('images') else ''
+avatar_html = f'<img src="{avatar}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0">' if avatar else ''
+
+st.markdown(f"""
+<div style="display:flex;align-items:center;justify-content:space-between;
+            background:#1a3a24;border:1px solid #1DB954;border-radius:8px;
+            padding:10px 16px;margin-bottom:8px">
+  <div style="display:flex;align-items:center;gap:10px">
+    {avatar_html}
+    <span style="color:#FFFFFF;font-size:0.95rem">
+      Conectado ao Spotify como <strong>{user['display_name']}</strong>
+    </span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+if st.button("Sair", key="logout"):
+    do_logout()
 
 tab_reload, tab_check, tab_info, tab_genres = st.tabs(
     ["Reload", "Check", "Info", "Genres"]
