@@ -570,8 +570,8 @@ with tab_config:
     for i, playlist in enumerate(st.session_state.config_playlists):
         current_id = st.session_state.get(f"cfg_{i}_id") or playlist.get('id', '')
         found = current_id in playlist_options
-        config_name = playlist.get('name', '') or f"Playlist {i + 1}"
-        label = (_playlist_name(current_id, config_name) if found else f"⚠ {config_name}") or f"Playlist {i + 1}"
+        label = _playlist_name(current_id, '') if found else f"⚠ Playlist {i + 1}"
+        label = label or f"Playlist {i + 1}"
         with st.expander(label, expanded=not found):
             opts = list(playlist_options.keys())
             idx = opts.index(current_id) if found else None
