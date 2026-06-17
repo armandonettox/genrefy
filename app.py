@@ -91,11 +91,35 @@ st.markdown("""
     padding: 12px 32px !important;
   }
 
-  /* Container centralizado com padding generoso */
+  /* Container centralizado -- sem scroll na pagina, somente as tabs scrollam */
+  html, body { overflow: hidden !important; height: 100% !important; }
+  [data-testid="stAppViewContainer"],
+  section[data-testid="stMain"] {
+    overflow: hidden !important;
+    height: 100vh !important;
+  }
   .block-container {
-    padding-top: 3rem !important;
-    padding-bottom: 3rem !important;
+    padding-top: 2rem !important;
+    padding-bottom: 0 !important;
     max-width: 860px !important;
+    height: calc(100vh - 60px) !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  /* Somente o conteudo interno da aba ativa faz scroll */
+  [data-testid="stTabsContent"] {
+    overflow-y: auto !important;
+    flex: 1 !important;
+    padding-bottom: 2rem;
+    scrollbar-width: thin;
+    scrollbar-color: #404040 transparent;
+  }
+  [data-testid="stTabsContent"]::-webkit-scrollbar { width: 4px; }
+  [data-testid="stTabsContent"]::-webkit-scrollbar-track { background: transparent; }
+  [data-testid="stTabsContent"]::-webkit-scrollbar-thumb {
+    background: #404040;
+    border-radius: 4px;
   }
 
   /* Icone de logout no banner */
