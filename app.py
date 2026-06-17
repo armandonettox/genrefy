@@ -85,6 +85,12 @@ st.markdown("""
     color: #FFFFFF !important;
     background: rgba(255,255,255,0.12) !important;
   }
+
+  /* Centraliza conteudo das tabs */
+  .stTabs h2, .stTabs h3 { text-align: center; }
+  .stTabs [data-testid="stMarkdownContainer"] p { text-align: center; }
+  .stTabs .stButton > button { display: block; margin: 0 auto; }
+  .stTabs [data-testid="stTabsContent"] { padding-top: 1.5rem; }
 </style>
 """, unsafe_allow_html=True)
 
