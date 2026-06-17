@@ -1,45 +1,28 @@
 ![Genrefy](assets/logo.png)
 
-Aplicacao que le as musicas curtidas do Spotify e as distribui automaticamente em playlists com base no genero dos artistas.
-
 Acesse em: https://genrefy.armandonetto.com
+
+---
+
+O Genrefy lê as músicas curtidas do Spotify e as distribui automaticamente em playlists com base no gênero dos artistas.
+
+A ideia surgiu da frustração de ter centenas de músicas curtidas misturadas sem organização. Em vez de criar playlists manualmente, o Genrefy faz isso automaticamente: você configura quais gêneros pertencem a cada playlist, conecta sua conta do Spotify e manda sincronizar. Ele varre todas as suas músicas curtidas, identifica os gêneros de cada artista via API do Spotify e distribui as faixas nas playlists certas.
 
 ## O que faz
 
-- Busca todas as suas musicas curtidas no Spotify
-- Identifica os generos de cada artista
-- Distribui as musicas nas playlists conforme as regras configuradas em `config/production.json`
-
-## Funcionalidades
-
-| Aba | Descricao |
-|-----|-----------|
-| Reload | Executa a distribuicao: esvazia e repopula todas as playlists configuradas |
-| Check | Lista artistas sem mapeamento de genero (nao entram em nenhuma playlist) |
-| Info | Mostra os generos de um artista pelo ID ou URL do Spotify |
-| Genres | Exporta CSV com todos os artistas e seus generos |
-
-## Configuracao das playlists
-
-Edite `config/production.json` para definir quais generos vao para qual playlist:
-
-| Campo | Descricao |
-|-------|-----------|
-| `id` | ID da playlist (do URL do Spotify) |
-| `name` | Nome da playlist (so para identificacao no log) |
-| `genres` | Generos que entram na playlist |
-| `ngenres` | Generos que nunca entram na playlist, mesmo que o artista tenha outros generos que batem |
-| `aoverride` | Artistas especificos forcados para a playlist, independente do genero |
+- Autentica com a conta do Spotify via OAuth
+- Busca todas as músicas curtidas do usuário
+- Identifica os gêneros de cada artista pela API do Spotify
+- Distribui as músicas nas playlists conforme as regras configuradas
+- Permite configurar playlists, gêneros incluídos, gêneros excluídos e artistas fixos direto pelo app
+- Mostra quais artistas não têm gênero mapeado em nenhuma playlist
+- Exporta CSV com todos os artistas e seus gêneros
 
 ## Stack
 
-- Python 3.12
-- Streamlit
-- spotipy
+- Python + Streamlit
+- spotipy (API do Spotify)
 - Podman + podman-compose
 - nginx (reverse proxy)
 - Oracle Cloud VM
-
-## Deploy
-
-O app roda em um container Podman na Oracle Cloud. O deploy e feito automaticamente via GitHub Actions ao fazer push na branch `master`.
+- GitHub Actions (deploy automático no push para `master`)

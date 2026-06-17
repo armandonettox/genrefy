@@ -38,6 +38,18 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+  @import url('https://fonts.googleapis.com/icon?family=Material+Icons');
+
+  /* Icone de playlist nos expanders via Material Icons */
+  [data-testid="stExpander"] summary p::before {
+    font-family: 'Material Icons';
+    content: 'queue_music';
+    margin-right: 6px;
+    vertical-align: -4px;
+    font-size: 1.1rem;
+    color: #1DB954;
+  }
+
   /* Botoes: pill shape verde Spotify */
   .stButton > button {
     background-color: #1DB954;
@@ -222,6 +234,16 @@ if "sp" not in st.session_state:
 sp = st.session_state.sp
 playlists = st.session_state.playlists
 
+if 'spotify_playlists' not in st.session_state:
+    with st.spinner("Carregando suas playlists do Spotify..."):
+        st.session_state.spotify_playlists = get_user_playlists(sp)
+
+spotify_playlists = st.session_state.spotify_playlists
+_playlist_name_map = {p['id']: p['name'] for p in spotify_playlists}
+
+def _playlist_name(pid: str) -> str:
+    return _playlist_name_map.get(pid, pid)
+
 def do_logout():
     cache_path = os.getenv('SPOTIFY_TOKEN_CACHE', '.spotify_cache')
     if os.path.exists(cache_path):
@@ -290,7 +312,7 @@ with tab_sync:
                 )
             with col_content:
                 name_style = "color:#FFFFFF;font-weight:700;font-size:1rem" if enabled else "color:#555;text-decoration:line-through;font-size:1rem"
-                st.markdown(f'<span style="{name_style}">{p["name"]}</span>', unsafe_allow_html=True)
+                st.markdown(f'<span style="{name_style}">{_playlist_name(p["id"])}</span>', unsafe_allow_html=True)
                 c1, c2, c3 = st.columns(3)
                 c1.checkbox("Gêneros", key=f"sync_g_{i}", value=bool(p.get("genres")), disabled=not enabled)
                 c2.checkbox("Excluir", key=f"sync_ng_{i}", value=bool(p.get("ngenres")), disabled=not enabled)
@@ -317,7 +339,7 @@ with tab_sync:
 
         st.markdown("**Playlists que serão sincronizadas:**")
         for p in selected:
-            st.markdown(f"- {p['name']}")
+            st.markdown(f"- {_playlist_name(p['id'])}")
         st.warning("Todas as faixas dessas playlists serão removidas e readicionadas.")
 
         confirmar, cancelar = _confirm_buttons("reload")
@@ -513,13 +535,7 @@ with tab_config:
             for p in load_playlists()
         ]
 
-    # Carrega playlists do Spotify do usuario (cache em session state)
-    if 'spotify_playlists' not in st.session_state:
-        with st.spinner("Carregando suas playlists do Spotify..."):
-            st.session_state.spotify_playlists = get_user_playlists(sp)
-
-    spotify_playlists = st.session_state.spotify_playlists
-    playlist_options = {p['id']: p['name'] for p in spotify_playlists}
+    playlist_options = _playlist_name_map
 
     def _sync_widgets():
         for i in range(len(st.session_state.config_playlists)):
@@ -534,8 +550,8 @@ with tab_config:
                 ]
 
     for i, playlist in enumerate(st.session_state.config_playlists):
-        label = playlist.get('name') or f"Playlist {i + 1}"
-        with st.expander(f"🎵 {label}", expanded=False):
+        label = _playlist_name(playlist.get('id', '')) or f"Playlist {i + 1}"
+        with st.expander(label, expanded=False):
             current_id = playlist.get('id', '')
             opts = list(playlist_options.keys())
             idx = opts.index(current_id) if current_id in opts else 0
