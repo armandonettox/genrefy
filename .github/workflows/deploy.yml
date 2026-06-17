@@ -17,9 +17,9 @@ jobs:
           cd ~/genrefy
           git pull
           podman build -t genrefy_genrefy:latest .
+          sudo pkill -9 -f aardvark-dns || true
+          sudo rm -rf /run/user/$(id -u)/containers/networks/aardvark-dns || true
           podman stop genrefy || true
           podman rm -f genrefy || true
           podman network rm genrefy_default || true
-          sudo pkill -9 -f aardvark-dns || true
-          sudo rm -rf /run/user/$(id -u)/containers/networks/aardvark-dns || true
           podman-compose up -d
