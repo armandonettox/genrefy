@@ -17,9 +17,15 @@ jobs:
           cd ~/genrefy
           git pull
           podman build -t genrefy_genrefy:latest .
-          sudo pkill -9 -f aardvark-dns || true
-          sudo rm -rf /run/user/$(id -u)/containers/networks/aardvark-dns || true
           podman stop genrefy || true
           podman rm -f genrefy || true
-          podman network rm genrefy_default || true
-          podman-compose up -d
+          podman run -d \
+            --name genrefy \
+            --restart unless-stopped \
+            -p 8005:8501 \
+            --env-file .env \
+            -v spotify-cache:/app/cache \
+            -v genrefy-config:/app/user_config \
+            genrefy_genrefy:latest
+          sleep 10
+          curl -sf http://localhost:8005 > /dev/null && echo "OK"
