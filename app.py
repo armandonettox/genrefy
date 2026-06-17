@@ -237,8 +237,8 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-tab_reload, tab_check, tab_info, tab_genres, tab_config = st.tabs(
-    ["Reload", "Check", "Info", "Genres", "Config"]
+tab_sync, tab_check, tab_info, tab_genres, tab_config = st.tabs(
+    ["Sincronizar", "Artistas", "Buscar", "Exportar", "Configurações"]
 )
 
 # --- helpers de UX compartilhados ---
@@ -249,21 +249,50 @@ def _confirm_buttons(key_prefix):
     cancelar  = c2.button("Cancelar",                  key=f"{key_prefix}_cancelar")
     return confirmar, cancelar
 
-# ── RELOAD ────────────────────────────────────────────────────────────────────
-with tab_reload:
-    st.subheader("Reload")
-    st.write(
-        "Busca todas as músicas curtidas, identifica os gêneros dos artistas "
-        "e repopula cada playlist configurada de acordo com os filtros de gênero."
-    )
+# ── SINCRONIZAR ───────────────────────────────────────────────────────────────
+with tab_sync:
+    st.subheader("Sincronizar")
+    st.write("Escolha quais playlists sincronizar e quais filtros aplicar.")
 
     if not st.session_state.get("reload_pending"):
-        if st.button("Executar Reload"):
+        for i, p in enumerate(playlists):
+            col_toggle, col_content = st.columns([1, 7])
+            with col_toggle:
+                enabled = st.toggle(
+                    "Ativa",
+                    key=f"sync_en_{i}",
+                    value=True,
+                    label_visibility="collapsed",
+                )
+            with col_content:
+                name_style = "color:#FFFFFF;font-weight:700;font-size:1rem" if enabled else "color:#555;text-decoration:line-through;font-size:1rem"
+                st.markdown(f'<span style="{name_style}">{p["name"]}</span>', unsafe_allow_html=True)
+                c1, c2, c3 = st.columns(3)
+                c1.checkbox("Gêneros", key=f"sync_g_{i}", value=bool(p.get("genres")), disabled=not enabled)
+                c2.checkbox("Excluir", key=f"sync_ng_{i}", value=bool(p.get("ngenres")), disabled=not enabled)
+                c3.checkbox("Forçar artistas", key=f"sync_ao_{i}", value=bool(p.get("aoverride")), disabled=not enabled)
+            st.divider()
+
+        if st.button("Sincronizar"):
+            selection = {
+                i: {
+                    "enabled": st.session_state.get(f"sync_en_{i}", True),
+                    "use_genres": st.session_state.get(f"sync_g_{i}", bool(p.get("genres"))),
+                    "use_ngenres": st.session_state.get(f"sync_ng_{i}", bool(p.get("ngenres"))),
+                    "use_aoverride": st.session_state.get(f"sync_ao_{i}", bool(p.get("aoverride"))),
+                }
+                for i, p in enumerate(playlists)
+            }
+            st.session_state.sync_selection = selection
             st.session_state.reload_pending = True
             st.rerun()
+
     else:
-        st.markdown("**O reload vai limpar e repopular as seguintes playlists:**")
-        for p in playlists:
+        selection = st.session_state.get("sync_selection", {})
+        selected = [playlists[i] for i, v in selection.items() if v.get("enabled")]
+
+        st.markdown("**Playlists que serão sincronizadas:**")
+        for p in selected:
             st.markdown(f"- {p['name']}")
         st.warning("Todas as faixas dessas playlists serão removidas e readicionadas.")
 
@@ -275,24 +304,38 @@ with tab_reload:
 
         if confirmar:
             st.session_state.reload_pending = False
-            with st.status("Executando reload...", expanded=True) as status:
+            modified_playlists = []
+            for i, p in enumerate(playlists):
+                sel = selection.get(i, {})
+                if not sel.get("enabled", True):
+                    continue
+                mp = dict(p)
+                if not sel.get("use_genres", True):
+                    mp["genres"] = []
+                if not sel.get("use_ngenres", True):
+                    mp["ngenres"] = []
+                if not sel.get("use_aoverride", True):
+                    mp["aoverride"] = []
+                modified_playlists.append(mp)
+
+            with st.status("Sincronizando...", expanded=True) as status:
                 try:
-                    _, summary = run_reload(sp, playlists, progress_callback=status.write)
-                    status.update(label="Reload concluído!", state="complete", expanded=False)
+                    _, summary = run_reload(sp, modified_playlists, progress_callback=status.write)
+                    status.update(label="Sincronização concluída!", state="complete", expanded=False)
                 except Exception as exc:
-                    status.update(label="Erro durante o reload", state="error")
+                    status.update(label="Erro durante a sincronização", state="error")
                     st.error(f"Detalhe: {exc}")
                     summary = {}
 
             if summary:
-                st.success("Reload concluído com sucesso!")
+                st.success("Sincronização concluída com sucesso!")
                 st.markdown("**Resultado por playlist:**")
                 for nome, contagem in summary.items():
                     st.markdown(f"- **{nome}**: {contagem} faixas")
 
-# ── CHECK ─────────────────────────────────────────────────────────────────────
+# ── ARTISTAS ──────────────────────────────────────────────────────────────────
 with tab_check:
-    st.subheader("Check")
+    st.subheader("Artistas")
     st.write(
         "Verifica quais artistas das suas músicas curtidas não têm mapeamento "
         "em nenhuma playlist configurada."
@@ -335,9 +378,9 @@ with tab_check:
                     ])
                     st.dataframe(df, use_container_width=True)
 
-# ── INFO ──────────────────────────────────────────────────────────────────────
+# ── BUSCAR ────────────────────────────────────────────────────────────────────
 with tab_info:
-    st.subheader("Info")
+    st.subheader("Buscar")
     st.write("Consulta os gêneros de um artista pelo ID ou URL do Spotify.")
 
     artist_input = st.text_input(
@@ -380,9 +423,9 @@ with tab_info:
                 else:
                     st.info("Nenhum gênero encontrado para este artista.")
 
-# ── GENRES ────────────────────────────────────────────────────────────────────
+# ── EXPORTAR ──────────────────────────────────────────────────────────────────
 with tab_genres:
-    st.subheader("Genres")
+    st.subheader("Exportar")
     st.write(
         "Gera um CSV com todos os artistas das suas músicas curtidas e seus gêneros, "
         "ordenados alfabeticamente."
@@ -425,9 +468,9 @@ with tab_genres:
                     mime="text/csv",
                 )
 
-# ── CONFIG ────────────────────────────────────────────────────────────────────
+# ── CONFIGURAÇÕES ─────────────────────────────────────────────────────────────
 with tab_config:
-    st.subheader("Configuração de Playlists")
+    st.subheader("Configurações")
     st.write(
         "Selecione as playlists do Spotify e configure quais gêneros vão para cada uma. "
         "A configuração é salva em volume e persiste entre deploys."
