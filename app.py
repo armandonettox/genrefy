@@ -39,9 +39,20 @@ st.markdown("""
   .stButton > button:active { transform: scale(0.98); }
 
   /* Tabs */
-  .stTabs [data-baseweb="tab-list"] { border-bottom: 1px solid #282828; gap: 4px; }
+  .stTabs [data-baseweb="tab-list"] {
+    border-bottom: 1px solid #282828;
+    justify-content: center;
+    gap: 8px;
+  }
   .stTabs [data-baseweb="tab-highlight"] { background-color: #1DB954; }
-  .stTabs [data-baseweb="tab"] { color: #B3B3B3; font-weight: 700; letter-spacing: 0.5px; }
+  .stTabs [data-baseweb="tab"] {
+    color: #B3B3B3;
+    font-weight: 700;
+    letter-spacing: 1px;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    padding: 12px 28px;
+  }
   .stTabs [aria-selected="true"] { color: #FFFFFF; }
 
   /* Inputs */
