@@ -16,5 +16,7 @@ jobs:
         run: |
           cd ~/genrefy
           git pull
-          podman-compose down
+          podman-compose down || true
+          sudo pkill -f aardvark-dns || true
+          sudo rm -rf /run/user/$(id -u)/containers/networks/aardvark-dns || true
           podman-compose up -d --build
