@@ -169,24 +169,44 @@ tab_reload, tab_check, tab_info, tab_genres = st.tabs(
 with tab_reload:
     st.subheader("Reload")
     st.write(
-        "Busca todas as músicas curtidas, decora com os gêneros dos artistas "
+        "Busca todas as músicas curtidas, identifica os gêneros dos artistas "
         "e repopula cada playlist configurada de acordo com os filtros de gênero."
     )
 
-    if st.button("Executar Reload"):
-        log_area = st.empty()
-        log_lines: list[str] = []
+    if not st.session_state.get("reload_pending"):
+        if st.button("Executar Reload"):
+            st.session_state.reload_pending = True
+            st.rerun()
+    else:
+        st.markdown("**O reload vai limpar e repopular as seguintes playlists:**")
+        for p in playlists:
+            st.markdown(f"- {p['name']}")
+        st.warning("Todas as faixas dessas playlists serão removidas e readicionadas.")
 
-        def on_progress(msg: str) -> None:
-            log_lines.append(msg)
-            log_area.text("\n".join(log_lines))
+        c1, c2, _ = st.columns([1, 1, 4])
+        confirmar = c1.button("Confirmar", type="primary")
+        cancelar = c2.button("Cancelar")
 
-        with st.spinner("Executando reload..."):
-            try:
-                run_reload(sp, playlists, progress_callback=on_progress)
-                st.success("Reload concluído com sucesso.")
-            except Exception as exc:
-                st.error(f"Erro durante o reload: {exc}")
+        if cancelar:
+            st.session_state.reload_pending = False
+            st.rerun()
+
+        if confirmar:
+            st.session_state.reload_pending = False
+            with st.status("Executando reload...", expanded=True) as status:
+                try:
+                    _, summary = run_reload(sp, playlists, progress_callback=status.write)
+                    status.update(label="Reload concluído!", state="complete", expanded=False)
+                except Exception as exc:
+                    status.update(label="Erro durante o reload", state="error")
+                    st.error(f"Detalhe: {exc}")
+                    summary = {}
+
+            if summary:
+                st.success("Reload concluído com sucesso!")
+                st.markdown("**Resultado por playlist:**")
+                for nome, contagem in summary.items():
+                    st.markdown(f"- **{nome}**: {contagem} faixas")
 
 with tab_check:
     st.subheader("Check")

@@ -55,7 +55,7 @@ def get_saved_tracks(sp: spotipy.Spotify) -> list[dict]:
     return tracks
 
 
-def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict]) -> list[dict]:
+def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_callback=None) -> list[dict]:
     seen = set()
     artist_ids = []
     for t in tracks:
@@ -70,12 +70,14 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict]) -> list[dict
     def fetch(aid):
         return sp.artist(aid)
 
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(fetch, aid): aid for aid in artist_ids}
         done = 0
         for future in as_completed(futures):
             done += 1
-            if done % 50 == 0:
+            if progress_callback and done % 20 == 0:
+                progress_callback(f'Carregando artistas: {done}/{total}...')
+            elif done % 50 == 0:
                 logger.info(f'Carregando artistas {done}/{total}...')
             try:
                 artists.append(future.result())
@@ -85,9 +87,10 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict]) -> list[dict
     return artists
 
 
-def decorate_artist_genres(sp: spotipy.Spotify, tracks: list[dict]) -> list[dict]:
-    logger.info('Carregando informacoes de genero dos artistas...')
-    artist_data = get_artists_for_tracks(sp, tracks)
+def decorate_artist_genres(sp: spotipy.Spotify, tracks: list[dict], progress_callback=None) -> list[dict]:
+    if progress_callback:
+        progress_callback('Buscando gêneros dos artistas...')
+    artist_data = get_artists_for_tracks(sp, tracks, progress_callback=progress_callback)
     artist_map = {a['id']: a['genres'] for a in artist_data}
 
     decorated = []

@@ -13,9 +13,10 @@ def _remove_all_playlist_tracks(sp, pid):
             break
 
 
-def run_reload(sp, playlists, progress_callback=None) -> list[str]:
-    """Retorna lista de mensagens de log. progress_callback(msg) e chamado a cada passo."""
+def run_reload(sp, playlists, progress_callback=None) -> tuple[list[str], dict]:
+    """Retorna (logs, summary). summary e {nome_playlist: contagem_de_tracks}."""
     logs = []
+    summary = {}
 
     def log(msg):
         logs.append(msg)
@@ -26,7 +27,7 @@ def run_reload(sp, playlists, progress_callback=None) -> list[str]:
     tracks = get_saved_tracks(sp)
     log(f'Successfully loaded {len(tracks)} songs')
 
-    decorated_tracks = decorate_artist_genres(sp, tracks)
+    decorated_tracks = decorate_artist_genres(sp, tracks, progress_callback=log)
 
     no_genre = sum(1 for t in decorated_tracks if not t['genres'])
     log(f'{no_genre}/{len(decorated_tracks)} tracks sem genero (artistas sem dados no Spotify)')
@@ -68,6 +69,7 @@ def run_reload(sp, playlists, progress_callback=None) -> list[str]:
                 if not any(g in playlist['ngenres'] for g in t['genres'])
             ]
 
+        summary[playlist['name']] = len(filtered)
         log(f"  {len(filtered)} tracks corresponderam aos filtros")
         if not filtered:
             log(f"  AVISO: nenhuma track correspondeu aos generos desta playlist")
@@ -87,5 +89,5 @@ def run_reload(sp, playlists, progress_callback=None) -> list[str]:
             log(f'  Adicionando chunk {i}–{i + chunk_size}...')
             sp.playlist_add_items(pid, [t['track']['uri'] for t in chunk])
 
-    log('Successfully completed main loop')
-    return logs
+    log('Reload concluído.')
+    return logs, summary
