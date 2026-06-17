@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -9,7 +10,12 @@ from commands.check import run_check
 from commands.genres import run_genres
 from commands.info import run_info
 from commands.reload import run_reload
-from spotify_client import create_auth_manager, create_spotify_client, is_authenticated
+from spotify_client import (
+    create_auth_manager,
+    create_spotify_client,
+    get_user_playlists,
+    is_authenticated,
+)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -105,11 +111,22 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+USER_CONFIG_PATH = Path('/app/user_config/config.json')
+
+
 def load_playlists() -> list[dict]:
+    if USER_CONFIG_PATH.exists():
+        with open(USER_CONFIG_PATH, encoding='utf-8') as f:
+            return json.load(f)['playlists']
     config_path = os.path.join(os.path.dirname(__file__), "config", "production.json")
     with open(config_path, encoding="utf-8") as f:
-        data = json.load(f)
-    return data["spotify"]["playlists"]
+        return json.load(f)['spotify']['playlists']
+
+
+def save_playlists_to_volume(playlists: list[dict]) -> None:
+    USER_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(USER_CONFIG_PATH, 'w', encoding='utf-8') as f:
+        json.dump({'playlists': playlists}, f, ensure_ascii=False, indent=2)
 
 
 if "auth_manager" not in st.session_state:
@@ -196,8 +213,8 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-tab_reload, tab_check, tab_info, tab_genres = st.tabs(
-    ["Reload", "Check", "Info", "Genres"]
+tab_reload, tab_check, tab_info, tab_genres, tab_config = st.tabs(
+    ["Reload", "Check", "Info", "Genres", "Config"]
 )
 
 # --- helpers de UX compartilhados ---
@@ -383,3 +400,120 @@ with tab_genres:
                     file_name="artists_genres.csv",
                     mime="text/csv",
                 )
+
+# ── CONFIG ────────────────────────────────────────────────────────────────────
+with tab_config:
+    st.subheader("Configuração de Playlists")
+    st.write(
+        "Selecione as playlists do Spotify e configure quais gêneros vão para cada uma. "
+        "A configuração é salva em volume e persiste entre deploys."
+    )
+
+    # Inicializa rascunho de config no session state
+    if 'config_playlists' not in st.session_state:
+        st.session_state.config_playlists = [
+            {
+                'id': p.get('id', ''),
+                'name': p.get('name', ''),
+                'genres': list(p.get('genres', [])),
+                'ngenres': list(p.get('ngenres', [])),
+                'aoverride': list(p.get('aoverride', [])),
+            }
+            for p in load_playlists()
+        ]
+
+    # Carrega playlists do Spotify do usuario (cache em session state)
+    if 'spotify_playlists' not in st.session_state:
+        with st.spinner("Carregando suas playlists do Spotify..."):
+            st.session_state.spotify_playlists = get_user_playlists(sp)
+
+    spotify_playlists = st.session_state.spotify_playlists
+    playlist_options = {p['id']: p['name'] for p in spotify_playlists}
+
+    def _sync_widgets():
+        for i in range(len(st.session_state.config_playlists)):
+            pid = st.session_state.get(f"cfg_{i}_id", st.session_state.config_playlists[i].get('id', ''))
+            st.session_state.config_playlists[i]['id'] = pid
+            st.session_state.config_playlists[i]['name'] = playlist_options.get(pid, pid)
+            for field in ('genres', 'ngenres', 'aoverride'):
+                default = "\n".join(st.session_state.config_playlists[i].get(field, []))
+                raw = st.session_state.get(f"cfg_{i}_{field}", default)
+                st.session_state.config_playlists[i][field] = [
+                    v.strip() for v in raw.split('\n') if v.strip()
+                ]
+
+    for i, playlist in enumerate(st.session_state.config_playlists):
+        label = playlist.get('name') or f"Playlist {i + 1}"
+        with st.expander(f"🎵 {label}", expanded=False):
+            current_id = playlist.get('id', '')
+            opts = list(playlist_options.keys())
+            idx = opts.index(current_id) if current_id in opts else 0
+            st.selectbox(
+                "Playlist do Spotify",
+                options=opts,
+                format_func=lambda x, po=playlist_options: po.get(x, x),
+                index=idx,
+                key=f"cfg_{i}_id",
+            )
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.text_area(
+                    "Gêneros",
+                    value="\n".join(playlist.get('genres', [])),
+                    key=f"cfg_{i}_genres",
+                    height=200,
+                    help="Um gênero por linha. Tracks cujo artista tenha esse gênero entram aqui.",
+                )
+            with col2:
+                st.text_area(
+                    "Excluir (ngenres)",
+                    value="\n".join(playlist.get('ngenres', [])),
+                    key=f"cfg_{i}_ngenres",
+                    height=200,
+                    help="Gêneros excluídos. Têm precedência absoluta sobre a lista de gêneros.",
+                )
+            with col3:
+                st.text_area(
+                    "Forçar artistas (aoverride)",
+                    value="\n".join(playlist.get('aoverride', [])),
+                    key=f"cfg_{i}_aoverride",
+                    height=200,
+                    help="Nome exato do artista. Entra aqui independente do gênero.",
+                )
+
+            if st.button("Remover playlist", key=f"cfg_remove_{i}"):
+                _sync_widgets()
+                st.session_state.config_playlists.pop(i)
+                for field in ('id', 'genres', 'ngenres', 'aoverride'):
+                    st.session_state.pop(f"cfg_{i}_{field}", None)
+                st.rerun()
+
+    st.divider()
+
+    _, c1, c2, c3, _ = st.columns([2, 1, 1, 1, 2])
+
+    if c1.button("+ Adicionar", key="cfg_add"):
+        _sync_widgets()
+        first = spotify_playlists[0] if spotify_playlists else {'id': '', 'name': 'Nova Playlist'}
+        st.session_state.config_playlists.append({
+            'id': first['id'],
+            'name': first['name'],
+            'genres': [],
+            'ngenres': [],
+            'aoverride': [],
+        })
+        st.rerun()
+
+    if c2.button("Descartar", key="cfg_discard"):
+        for key in list(st.session_state.keys()):
+            if key.startswith('cfg_'):
+                del st.session_state[key]
+        st.session_state.pop('config_playlists', None)
+        st.rerun()
+
+    if c3.button("Salvar", type="primary", key="cfg_save"):
+        _sync_widgets()
+        save_playlists_to_volume(st.session_state.config_playlists)
+        st.session_state.playlists = list(st.session_state.config_playlists)
+        st.success("Configuração salva! Será usada no próximo Reload.")

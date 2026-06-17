@@ -8,7 +8,9 @@ services:
       - .env
     volumes:
       - spotify-cache:/app/cache
+      - genrefy-config:/app/user_config
     restart: unless-stopped
 
 volumes:
   spotify-cache:
+  genrefy-config:
