@@ -1,0 +1,20 @@
+name: Deploy genrefy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build e reinicia container
+        run: |
+          cd ~/genrefy
+          git pull
+          podman-compose down
+          podman-compose up -d --build

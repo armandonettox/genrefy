@@ -1,0 +1,16 @@
+README.md
+.prettierignore
+.prettierrc.json
+.vscode
+.github
+LICENSE
+.env
+.spotify_cache
+__pycache__
+*.pyc
+.venv
+node_modules
+src
+tsconfig.json
+package.json
+package-lock.json

@@ -1,0 +1,14 @@
+services:
+  genrefy:
+    build: .
+    container_name: genrefy
+    ports:
+      - "8005:8501"
+    env_file:
+      - .env
+    volumes:
+      - spotify-cache:/app/cache
+    restart: unless-stopped
+
+volumes:
+  spotify-cache:
