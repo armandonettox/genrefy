@@ -14,11 +14,25 @@ jobs:
 
       - name: Build e reinicia container
         run: |
-          cd ~/genrefy
-          git pull
-          podman build -t genrefy_genrefy:latest .
+          # build usando o codigo do commit atual com cache de layers
+          podman build --layers --cache-from genrefy_genrefy:latest -t genrefy_genrefy:latest $GITHUB_WORKSPACE
+
+          # variaveis necessarias para o systemctl --user funcionar no runner
           export XDG_RUNTIME_DIR=/run/user/$(id -u)
           export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus
+
           systemctl --user restart genrefy.service
-          sleep 10
-          curl -sf http://localhost:8005 > /dev/null && echo "OK"
+
+          # aguarda o servico responder, com ate 6 tentativas de 5s cada
+          i=0
+          until curl -sf http://localhost:8005 > /dev/null; do
+            i=$((i + 1))
+            if [ $i -ge 6 ]; then
+              echo "Servico nao respondeu apos 30s. Logs do container:"
+              journalctl --user -u genrefy.service -n 30 --no-pager
+              exit 1
+            fi
+            echo "Tentativa $i/6 falhou, aguardando 5s..."
+            sleep 5
+          done
+          echo "OK"
