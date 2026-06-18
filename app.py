@@ -342,19 +342,35 @@ with tab_sync:
             if not cfg:
                 st.caption("Nenhuma playlist configurada.")
             else:
-                labels = []
-                for i, p in enumerate(cfg):
-                    pid = st.session_state.get(f"cfg_{i}_id") or p.get('id', '')
-                    name = _playlist_name(pid, '') or f"Playlist {i + 1}"
-                    labels.append(name)
+                sel = st.session_state.get("sel_playlist", 0)
+                sel = min(sel, len(cfg) - 1)
 
-                sel = st.radio(
-                    "Playlists",
-                    options=list(range(len(cfg))),
-                    format_func=lambda i: labels[i],
-                    label_visibility="collapsed",
-                    key="sel_playlist",
-                )
+                if 'playlist_covers' not in st.session_state:
+                    st.session_state.playlist_covers = {}
+                for j, p in enumerate(cfg):
+                    pid = st.session_state.get(f"cfg_{j}_id") or p.get('id', '')
+                    if pid and pid not in st.session_state.playlist_covers:
+                        try:
+                            imgs = sp.playlist(pid, fields='images').get('images', [])
+                            st.session_state.playlist_covers[pid] = imgs[0]['url'] if imgs else ''
+                        except Exception:
+                            st.session_state.playlist_covers[pid] = ''
+
+                for idx, p in enumerate(cfg):
+                    pid = st.session_state.get(f"cfg_{idx}_id") or p.get('id', '')
+                    name = _playlist_name(pid, '') or f"Playlist {idx + 1}"
+                    cover = st.session_state.playlist_covers.get(pid, '')
+                    is_selected = (idx == sel)
+                    c_img, c_name = st.columns([1, 3])
+                    with c_img:
+                        if cover:
+                            st.image(cover, width=40)
+                    with c_name:
+                        label = f"▶ {name}" if is_selected else name
+                        if st.button(label, key=f"sel_pl_{idx}", use_container_width=True):
+                            _flush_widgets()
+                            st.session_state.sel_playlist = idx
+                            st.rerun()
 
             if st.button("+ Adicionar", key="cfg_add"):
                 _flush_widgets()
@@ -516,10 +532,14 @@ with tab_check:
                 else:
                     st.warning(f"{len(missing)} artista(s) sem mapeamento encontrado(s).")
                     df = pd.DataFrame([
-                        {"Nome": a["name"], "Gêneros": ", ".join(a["genres"])}
+                        {"": a.get("image", ""), "Nome": a["name"], "Gêneros": ", ".join(a["genres"])}
                         for a in missing
                     ])
-                    st.dataframe(df, use_container_width=True)
+                    st.dataframe(
+                        df,
+                        column_config={"": st.column_config.ImageColumn("", width="small")},
+                        use_container_width=True,
+                    )
 
 # ── BUSCAR ────────────────────────────────────────────────────────────────────
 with tab_info:

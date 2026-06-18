@@ -16,4 +16,11 @@ def run_check(sp, playlists) -> list[dict]:
     if all_overrides:
         missing = [a for a in missing if a['name'] not in all_overrides]
 
-    return [{'name': a['name'], 'genres': a['genres']} for a in missing]
+    return [
+        {
+            'name': a['name'],
+            'genres': a['genres'],
+            'image': a['images'][0]['url'] if a.get('images') else '',
+        }
+        for a in missing
+    ]
