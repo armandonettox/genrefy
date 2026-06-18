@@ -10,19 +10,12 @@ A ideia surgiu da frustração de ter centenas de músicas curtidas misturadas s
 
 ## O que faz
 
+<img width="1019" height="468" alt="landing-page" src="https://github.com/user-attachments/assets/5441df9a-e152-45cd-a3a7-e24e453fa339" />
+
 - Autentica com a conta do Spotify via OAuth
 - Busca todas as músicas curtidas do usuário
 - Identifica os gêneros de cada artista pela API do Spotify
 - Distribui as músicas nas playlists conforme as regras configuradas
 - Permite configurar playlists, gêneros incluídos, gêneros excluídos e artistas fixos direto pelo app
 - Mostra quais artistas não têm gênero mapeado em nenhuma playlist
-- Exporta CSV com todos os artistas e seus gêneros
-
-## Stack
-
-- Python + Streamlit
-- spotipy (API do Spotify)
-- Podman + podman-compose
-- nginx (reverse proxy)
-- Oracle Cloud VM
-- GitHub Actions (deploy automático no push para `master`)
+- Exporta CSV com todos os artistas e seus gêneros.
