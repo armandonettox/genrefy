@@ -151,3 +151,12 @@ __pycache__/
 
 # Saida gerada
 output.csv
+
+# Claude Code
+CLAUDE.md
+.claude/
+
+# Documentacao (gerada localmente)
+docs/
+mkdocs.yml
+site/
