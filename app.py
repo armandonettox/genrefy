@@ -16,6 +16,7 @@ from commands.reload import run_reload
 from spotify_client import (
     create_auth_manager,
     create_spotify_client,
+    get_library_genres_and_artists,
     get_user_playlists,
     is_authenticated,
 )
@@ -325,11 +326,11 @@ with tab_sync:
             st.session_state.config_playlists[i]['id'] = pid
             st.session_state.config_playlists[i]['name'] = playlist_options.get(pid, pid)
             for field in ('genres', 'ngenres', 'aoverride'):
-                default = "\n".join(st.session_state.config_playlists[i].get(field, []))
-                raw = st.session_state.get(f"cfg_{i}_{field}", default)
-                st.session_state.config_playlists[i][field] = [
-                    v.strip() for v in raw.split('\n') if v.strip()
-                ]
+                val = st.session_state.get(f"cfg_{i}_{field}", st.session_state.config_playlists[i].get(field, []))
+                if isinstance(val, list):
+                    st.session_state.config_playlists[i][field] = val
+                else:
+                    st.session_state.config_playlists[i][field] = [v.strip() for v in val.split('\n') if v.strip()]
 
     if not st.session_state.get("reload_pending"):
         cfg = st.session_state.config_playlists
@@ -383,30 +384,36 @@ with tab_sync:
                     key=f"cfg_{i}_id",
                 )
 
+                if 'library_genres' not in st.session_state:
+                    with st.spinner("Carregando gêneros da biblioteca..."):
+                        genres, artists = get_library_genres_and_artists(sp)
+                        st.session_state.library_genres = genres
+                        st.session_state.library_artists = artists
+
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.text_area(
+                    st.multiselect(
                         "Gêneros",
-                        value="\n".join(playlist.get('genres', [])),
+                        options=st.session_state.library_genres,
+                        default=playlist.get('genres', []),
                         key=f"cfg_{i}_genres",
-                        height=160,
-                        help="Um gênero por linha.",
+                        help="Gêneros que entram nesta playlist.",
                     )
                 with col2:
-                    st.text_area(
+                    st.multiselect(
                         "Excluir",
-                        value="\n".join(playlist.get('ngenres', [])),
+                        options=st.session_state.library_genres,
+                        default=playlist.get('ngenres', []),
                         key=f"cfg_{i}_ngenres",
-                        height=160,
                         help="Gêneros excluídos com precedência absoluta.",
                     )
                 with col3:
-                    st.text_area(
+                    st.multiselect(
                         "Forçar artistas",
-                        value="\n".join(playlist.get('aoverride', [])),
+                        options=st.session_state.library_artists,
+                        default=playlist.get('aoverride', []),
                         key=f"cfg_{i}_aoverride",
-                        height=160,
-                        help="Nome exato do artista — entra independente do gênero.",
+                        help="Artista entra independente do gênero.",
                     )
 
                 b1, b2, b3, b4 = st.columns(4)
