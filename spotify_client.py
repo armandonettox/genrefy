@@ -22,7 +22,7 @@ from pathlib import Path
 
 import spotipy
 from dotenv import load_dotenv
-from spotipy.oauth2 import SpotifyOAuth
+from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
 
 load_dotenv()
 
@@ -88,6 +88,19 @@ def create_spotify_client(auth_manager: SpotifyOAuth) -> spotipy.Spotify:
     return spotipy.Spotify(auth_manager=auth_manager, requests_timeout=15, retries=1)
 
 
+def _make_cc_client() -> spotipy.Spotify | None:
+    """Cliente com client credentials para endpoints publicos (nao precisa de auth do usuario)."""
+    try:
+        ccm = SpotifyClientCredentials(
+            client_id=os.getenv('SPOTIFY_CLIENT_ID', ''),
+            client_secret=os.getenv('SPOTIFY_CLIENT_SECRET', ''),
+        )
+        return spotipy.Spotify(auth_manager=ccm, requests_timeout=15)
+    except Exception as e:
+        logger.warning(f'Nao foi possivel criar cliente CC: {e}')
+        return None
+
+
 def is_authenticated(auth_manager: SpotifyOAuth) -> bool:
     try:
         token = auth_manager.get_cached_token()
@@ -128,17 +141,35 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_cal
     batch_size = 50
     num_batches = (total + batch_size - 1) // batch_size
 
+    # Usa client credentials para o endpoint publico de artistas.
+    # Isso evita problemas com o token OAuth do usuario para chamadas que nao precisam de auth.
+    cc = _make_cc_client() or sp
+
     for batch_num, i in enumerate(range(0, total, batch_size)):
         batch = artist_ids[i:i + batch_size]
+        loaded = False
+
+        # Tenta com client credentials
         try:
-            result = sp.artists(batch)
+            result = cc.artists(batch)
             batch_artists = [a for a in result.get('artists', []) if a]
             artists.extend(batch_artists)
-            logger.info(f'Lote {batch_num + 1}/{num_batches}: {len(batch_artists)} artistas')
+            logger.info(f'Lote {batch_num + 1}/{num_batches} (cc): {len(batch_artists)} artistas')
+            loaded = True
         except spotipy.SpotifyException as e:
-            logger.error(f'Lote {batch_num + 1} erro HTTP {e.http_status}: {e.msg}')
+            logger.warning(f'Lote {batch_num + 1} cc falhou HTTP {e.http_status}')
         except Exception as e:
-            logger.error(f'Lote {batch_num + 1} erro: {type(e).__name__}: {e}')
+            logger.warning(f'Lote {batch_num + 1} cc falhou: {type(e).__name__}')
+
+        # Fallback com token do usuario se client credentials falhou e e um cliente diferente
+        if not loaded and cc is not sp:
+            try:
+                result = sp.artists(batch)
+                batch_artists = [a for a in result.get('artists', []) if a]
+                artists.extend(batch_artists)
+                logger.info(f'Lote {batch_num + 1}/{num_batches} (user): {len(batch_artists)} artistas')
+            except Exception as e:
+                logger.error(f'Lote {batch_num + 1} user tambem falhou: {type(e).__name__}: {e}')
 
         if progress_callback:
             progress_callback(f'Carregando artistas: {min(i + batch_size, total)}/{total}...')
@@ -165,7 +196,7 @@ def get_library_data(sp: spotipy.Spotify, on_progress=None) -> tuple[list[str], 
 
     def tracks_progress(done, total):
         if on_progress:
-            on_progress(done / total, f'Músicas: {done}/{total}')
+            on_progress(done / total, f'Musicas: {done}/{total}')
 
     tracks = get_saved_tracks(sp, on_progress=tracks_progress)
 
@@ -188,7 +219,7 @@ def get_library_genres_and_artists(sp: spotipy.Spotify) -> tuple[list[str], list
 
 def decorate_artist_genres(sp: spotipy.Spotify, tracks: list[dict], progress_callback=None) -> list[dict]:
     if progress_callback:
-        progress_callback('Buscando gêneros dos artistas...')
+        progress_callback('Buscando generos dos artistas...')
     artist_data = get_artists_for_tracks(sp, tracks, progress_callback=progress_callback)
     artist_map = {a['id']: a['genres'] for a in artist_data}
 

@@ -357,6 +357,14 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+if not st.session_state.get("library_genres_ok", True):
+    _c1, _c2 = st.columns([5, 1])
+    _c1.warning("Generos dos artistas nao carregaram. Filtros de genero estarao vazios.")
+    if _c2.button("Recarregar", key="retry_genres"):
+        st.session_state.pop("library_loaded", None)
+        st.session_state.pop("library_genres_ok", None)
+        st.rerun()
+
 tab_sync, tab_check, tab_info, tab_genres = st.tabs(
     ["Sincronizar", "Artistas", "Buscar", "Exportar"]
 )
