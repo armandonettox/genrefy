@@ -91,12 +91,15 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_cal
     artists = []
     done = 0
 
+    first_error = None
     for batch in batches:
         try:
             result = [a for a in sp.artists(batch)['artists'] if a]
             artists.extend(result)
             done += len(result)
         except Exception as e:
+            if first_error is None:
+                first_error = e
             logger.warning(f'Erro ao carregar lote de artistas: {e}')
         if on_progress:
             on_progress(min(done, total), total)
@@ -104,6 +107,14 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_cal
             progress_callback(f'Carregando artistas: {min(done, total)}/{total}...')
 
     logger.info(f'Artistas carregados: {len(artists)}/{total}')
+
+    if not artists and total > 0:
+        detail = f' Primeiro erro: {first_error}' if first_error else ''
+        raise RuntimeError(
+            f'Nenhum artista retornado pela API do Spotify '
+            f'({total} IDs enviados, 0 recebidos).{detail}'
+        )
+
     return artists
 
 

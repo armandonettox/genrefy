@@ -282,7 +282,10 @@ if not st.session_state.get('library_loaded'):
         _phase_label.empty()
         _bar.empty()
         _pct_label.empty()
+        st.session_state.pop('library_loaded', None)
         st.error(f"Erro ao carregar biblioteca do Spotify: {_lib_err}")
+        if st.button("Tentar novamente"):
+            st.rerun()
         st.stop()
 
     _phase_label.empty()
