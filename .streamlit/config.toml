@@ -1,6 +1,9 @@
 [client]
 toolbarMode = "minimal"
 
+[server]
+pingTimeout = 300
+
 [theme]
 base = "dark"
 primaryColor = "#1DB954"

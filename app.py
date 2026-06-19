@@ -1,4 +1,4 @@
-# genrefy — Distribui musicas curtidas do Spotify em playlists por genero
+﻿# genrefy — Distribui musicas curtidas do Spotify em playlists por genero
 # Copyright (C) 2026 Armando Netto <armandosln7@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
@@ -36,6 +36,8 @@ from spotify_client import (
     get_saved_tracks,
     get_user_playlists,
     is_authenticated,
+    load_artist_cache,
+    save_artist_cache,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -271,27 +273,30 @@ if not st.session_state.get('library_loaded'):
 
         _bar.empty()
 
-    # Fase 2: busca dados dos artistas em lotes de 50
-    _bar2 = st.empty()
+    # Fase 2: busca dados dos artistas — tenta cache antes de chamar a API
+    _user_id = sp.me().get('id', 'unknown')
+    _cached = load_artist_cache(_user_id)
 
-    def _on_artists_progress(done: int, total: int):
-        _bar2.progress(done / total, text=f'Carregando artistas: {done} / {total}')
+    if _cached is not None:
+        _artists = _cached
+    else:
+        _bar2 = st.empty()
 
-    try:
+        def _on_artists_progress(done: int, total: int):
+            _bar2.progress(done / total, text=f'Carregando artistas: {done} / {total}')
+
         _artists = get_artists_for_tracks(
             sp, st.session_state.library_tracks, on_progress=_on_artists_progress
         )
-        st.session_state.library_genres = sorted({g for a in _artists for g in a['genres']})
-        st.session_state.library_artists = sorted({a['name'] for a in _artists})
-        st.session_state.library_loaded = True
-    except Exception as _lib_err:
-        st.session_state.pop('library_loaded', None)
-        st.error(f'Erro ao carregar artistas: {_lib_err}')
-        if st.button('Tentar novamente'):
-            st.rerun()
-        st.stop()
+        _bar2.empty()
 
-    _bar2.empty()
+        if _artists:
+            save_artist_cache(_user_id, _artists)
+
+    st.session_state.library_genres = sorted({g for a in _artists for g in a['genres']})
+    st.session_state.library_artists = sorted({a['name'] for a in _artists})
+    st.session_state.library_loaded = True
+    st.session_state.library_genres_ok = bool(_artists)
 
 if 'spotify_playlists' not in st.session_state:
     with st.spinner("Carregando suas playlists do Spotify..."):
@@ -316,7 +321,8 @@ def do_logout():
     if os.path.exists(cache_path):
         os.remove(cache_path)
     for key in ['sp', 'auth_manager', 'playlists', 'auth_error',
-                'library_loaded', 'library_genres', 'library_artists', 'library_tracks']:
+                'library_loaded', 'library_genres', 'library_artists', 'library_tracks',
+                'library_genres_ok']:
         st.session_state.pop(key, None)
     st.rerun()
 

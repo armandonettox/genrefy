@@ -17,6 +17,7 @@
 import json
 import logging
 import os
+import time
 from pathlib import Path
 
 import spotipy
@@ -26,6 +27,44 @@ from spotipy.oauth2 import SpotifyOAuth
 load_dotenv()
 
 logger = logging.getLogger(__name__)
+
+_CACHE_DIR = Path(os.getenv('ARTIST_CACHE_DIR', '/app/cache'))
+_CACHE_TTL = 86400  # 24 horas
+
+
+def _artist_cache_path(user_id: str) -> Path:
+    return _CACHE_DIR / f'artists_{user_id}.json'
+
+
+def load_artist_cache(user_id: str) -> list[dict] | None:
+    path = _artist_cache_path(user_id)
+    try:
+        if not path.exists():
+            return None
+        data = json.loads(path.read_text(encoding='utf-8'))
+        age = time.time() - data.get('timestamp', 0)
+        if age > _CACHE_TTL:
+            logger.info('Cache de artistas expirado')
+            return None
+        artists = data.get('artists', [])
+        logger.info(f'Cache de artistas carregado: {len(artists)} artistas')
+        return artists
+    except Exception as e:
+        logger.warning(f'Erro ao ler cache de artistas: {e}')
+        return None
+
+
+def save_artist_cache(user_id: str, artists: list[dict]) -> None:
+    try:
+        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        path = _artist_cache_path(user_id)
+        path.write_text(
+            json.dumps({'timestamp': time.time(), 'artists': artists}, ensure_ascii=False),
+            encoding='utf-8',
+        )
+        logger.info(f'Cache de artistas salvo: {len(artists)} artistas')
+    except Exception as e:
+        logger.warning(f'Erro ao salvar cache de artistas: {e}')
 
 
 def create_auth_manager() -> SpotifyOAuth:
@@ -46,7 +85,7 @@ def create_auth_manager() -> SpotifyOAuth:
 
 
 def create_spotify_client(auth_manager: SpotifyOAuth) -> spotipy.Spotify:
-    return spotipy.Spotify(auth_manager=auth_manager, requests_timeout=10)
+    return spotipy.Spotify(auth_manager=auth_manager, requests_timeout=15, retries=1)
 
 
 def is_authenticated(auth_manager: SpotifyOAuth) -> bool:
@@ -96,13 +135,10 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_cal
             batch_artists = [a for a in result.get('artists', []) if a]
             artists.extend(batch_artists)
             logger.info(f'Lote {batch_num + 1}/{num_batches}: {len(batch_artists)} artistas')
+        except spotipy.SpotifyException as e:
+            logger.error(f'Lote {batch_num + 1} erro HTTP {e.http_status}: {e.msg}')
         except Exception as e:
-            logger.warning(f'Lote {batch_num + 1} falhou ({type(e).__name__}), tentando individual...')
-            for aid in batch:
-                try:
-                    artists.append(sp.artist(aid))
-                except Exception as e2:
-                    logger.warning(f'Artista {aid}: {e2}')
+            logger.error(f'Lote {batch_num + 1} erro: {type(e).__name__}: {e}')
 
         if progress_callback:
             progress_callback(f'Carregando artistas: {min(i + batch_size, total)}/{total}...')
@@ -110,12 +146,6 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_cal
             on_progress(min(i + batch_size, total), total)
 
     logger.info(f'Artistas carregados: {len(artists)}/{total}')
-
-    if not artists and total > 0:
-        raise RuntimeError(
-            f'Nenhum artista retornado pela API do Spotify ({total} IDs enviados, 0 recebidos).'
-        )
-
     return artists
 
 
