@@ -137,6 +137,9 @@ def get_library_data(sp: spotipy.Spotify, on_progress=None) -> tuple[list[str], 
 
     tracks = get_saved_tracks(sp, on_progress=tracks_progress)
 
+    if on_progress:
+        on_progress(0.0, 'Artistas: carregando...')
+
     def artist_progress(done, total):
         if on_progress:
             on_progress(done / total, f'Artistas: {done}/{total}')
