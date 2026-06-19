@@ -85,28 +85,30 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_cal
             seen.add(aid)
             artist_ids.append(aid)
 
-    artists = []
     total = len(artist_ids)
+    # Spotify aceita ate 50 IDs por chamada — reduz de ~500 para ~10 requisicoes
+    batches = [artist_ids[i:i + 50] for i in range(0, total, 50)]
+    artists = []
+    done = 0
 
-    def fetch(aid):
-        return sp.artist(aid)
+    def fetch_batch(batch):
+        return [a for a in sp.artists(batch)['artists'] if a]
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {executor.submit(fetch, aid): aid for aid in artist_ids}
-        done = 0
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {executor.submit(fetch_batch, b): i for i, b in enumerate(batches)}
         for future in as_completed(futures):
-            done += 1
-            if on_progress:
-                on_progress(done, total)
-            if progress_callback and done % 20 == 0:
-                progress_callback(f'Carregando artistas: {done}/{total}...')
-            elif done % 50 == 0:
-                logger.info(f'Carregando artistas {done}/{total}...')
             try:
-                artists.append(future.result())
+                result = future.result()
+                artists.extend(result)
+                done += len(result)
             except Exception as e:
-                logger.warning(f'Erro ao carregar artista {futures[future]}: {e}')
+                logger.warning(f'Erro ao carregar lote de artistas: {e}')
+            if on_progress:
+                on_progress(min(done, total), total)
+            if progress_callback:
+                progress_callback(f'Carregando artistas: {min(done, total)}/{total}...')
 
+    logger.info(f'Artistas carregados: {len(artists)}/{total}')
     return artists
 
 
