@@ -252,15 +252,30 @@ sp = st.session_state.sp
 playlists = st.session_state.playlists
 
 if 'library_genres' not in st.session_state:
-    _bar = st.progress(0.0, text="Carregando sua biblioteca do Spotify...")
-    _status = st.empty()
+    st.markdown(
+        "<p style='color:#B3B3B3;font-size:0.85rem;margin-bottom:4px'>"
+        "Isso leva alguns segundos na primeira vez.</p>",
+        unsafe_allow_html=True,
+    )
+    _phase_label = st.empty()
+    _bar = st.progress(0.0)
+    _pct_label = st.empty()
 
     def _on_library_progress(pct: float, msg: str):
-        _bar.progress(pct, text=msg)
+        is_tracks_phase = msg.startswith("Músicas")
+        phase_text = "1 / 2 — Baixando músicas curtidas" if is_tracks_phase else "2 / 2 — Carregando dados dos artistas"
+        _phase_label.markdown(f"**{phase_text}**")
+        _bar.progress(pct)
+        _pct_label.markdown(
+            f"<p style='color:#B3B3B3;font-size:0.8rem;margin-top:2px'>"
+            f"{int(pct * 100)}% &nbsp;·&nbsp; {msg}</p>",
+            unsafe_allow_html=True,
+        )
 
     genres, artists, tracks = get_library_data(sp, on_progress=_on_library_progress)
-    _bar.progress(1.0, text="Biblioteca carregada!")
-    _status.empty()
+    _phase_label.empty()
+    _bar.empty()
+    _pct_label.empty()
     st.session_state.library_genres = genres
     st.session_state.library_artists = artists
     st.session_state.library_tracks = tracks

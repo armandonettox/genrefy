@@ -126,13 +126,13 @@ def get_library_data(sp: spotipy.Spotify, on_progress=None) -> tuple[list[str], 
 
     def tracks_progress(done, total):
         if on_progress:
-            on_progress(done / total * 0.3, f'Músicas: {done}/{total}')
+            on_progress(done / total, f'Músicas: {done}/{total}')
 
     tracks = get_saved_tracks(sp, on_progress=tracks_progress)
 
     def artist_progress(done, total):
         if on_progress:
-            on_progress(0.3 + done / total * 0.7, f'Artistas: {done}/{total}')
+            on_progress(done / total, f'Artistas: {done}/{total}')
 
     artists = get_artists_for_tracks(sp, tracks, on_progress=artist_progress)
     all_genres = sorted({g for a in artists for g in a['genres']})
