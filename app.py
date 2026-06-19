@@ -251,7 +251,7 @@ if "sp" not in st.session_state:
 sp = st.session_state.sp
 playlists = st.session_state.playlists
 
-if not st.session_state.get('library_genres'):
+if not st.session_state.get('library_loaded'):
     st.markdown(
         "<p style='color:#B3B3B3;font-size:0.85rem;margin-bottom:4px'>"
         "Isso leva alguns segundos na primeira vez.</p>",
@@ -272,13 +272,22 @@ if not st.session_state.get('library_genres'):
             unsafe_allow_html=True,
         )
 
-    genres, artists, tracks = get_library_data(sp, on_progress=_on_library_progress)
+    try:
+        genres, artists, tracks = get_library_data(sp, on_progress=_on_library_progress)
+        st.session_state.library_genres = genres
+        st.session_state.library_artists = artists
+        st.session_state.library_tracks = tracks
+        st.session_state.library_loaded = True
+    except Exception as _lib_err:
+        _phase_label.empty()
+        _bar.empty()
+        _pct_label.empty()
+        st.error(f"Erro ao carregar biblioteca do Spotify: {_lib_err}")
+        st.stop()
+
     _phase_label.empty()
     _bar.empty()
     _pct_label.empty()
-    st.session_state.library_genres = genres
-    st.session_state.library_artists = artists
-    st.session_state.library_tracks = tracks
 
 if 'spotify_playlists' not in st.session_state:
     with st.spinner("Carregando suas playlists do Spotify..."):
@@ -302,7 +311,8 @@ def do_logout():
     cache_path = os.getenv('SPOTIFY_TOKEN_CACHE', '.spotify_cache')
     if os.path.exists(cache_path):
         os.remove(cache_path)
-    for key in ['sp', 'auth_manager', 'playlists', 'auth_error']:
+    for key in ['sp', 'auth_manager', 'playlists', 'auth_error',
+                'library_loaded', 'library_genres', 'library_artists', 'library_tracks']:
         st.session_state.pop(key, None)
     st.rerun()
 
