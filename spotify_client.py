@@ -46,7 +46,7 @@ def create_auth_manager() -> SpotifyOAuth:
 
 
 def create_spotify_client(auth_manager: SpotifyOAuth) -> spotipy.Spotify:
-    return spotipy.Spotify(auth_manager=auth_manager)
+    return spotipy.Spotify(auth_manager=auth_manager, requests_timeout=10)
 
 
 def is_authenticated(auth_manager: SpotifyOAuth) -> bool:

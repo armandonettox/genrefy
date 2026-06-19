@@ -32,7 +32,8 @@ from commands.reload import run_reload
 from spotify_client import (
     create_auth_manager,
     create_spotify_client,
-    get_library_data,
+    get_artists_for_tracks,
+    get_saved_tracks,
     get_user_playlists,
     is_authenticated,
 )
@@ -252,45 +253,37 @@ sp = st.session_state.sp
 playlists = st.session_state.playlists
 
 if not st.session_state.get('library_loaded'):
-    st.markdown(
-        "<p style='color:#B3B3B3;font-size:0.85rem;margin-bottom:4px'>"
-        "Isso leva alguns segundos na primeira vez.</p>",
-        unsafe_allow_html=True,
-    )
-    _phase_label = st.empty()
-    _bar = st.progress(0.0)
-    _pct_label = st.empty()
+    # Fase 1: baixa as musicas curtidas com barra de progresso
+    if not st.session_state.get('library_tracks'):
+        _bar = st.empty()
 
-    def _on_library_progress(pct: float, msg: str):
-        is_tracks_phase = msg.startswith("Músicas")
-        phase_text = "1 / 2 — Baixando músicas curtidas" if is_tracks_phase else "2 / 2 — Carregando dados dos artistas"
-        _phase_label.markdown(f"**{phase_text}**")
-        _bar.progress(pct)
-        _pct_label.markdown(
-            f"<p style='color:#B3B3B3;font-size:0.8rem;margin-top:2px'>"
-            f"{int(pct * 100)}% &nbsp;·&nbsp; {msg}</p>",
-            unsafe_allow_html=True,
-        )
+        def _on_tracks_progress(done: int, total: int):
+            _bar.progress(done / total, text=f'Baixando músicas curtidas: {done} / {total}')
 
-    try:
-        genres, artists, tracks = get_library_data(sp, on_progress=_on_library_progress)
-        st.session_state.library_genres = genres
-        st.session_state.library_artists = artists
-        st.session_state.library_tracks = tracks
-        st.session_state.library_loaded = True
-    except Exception as _lib_err:
-        _phase_label.empty()
+        try:
+            _tracks = get_saved_tracks(sp, on_progress=_on_tracks_progress)
+            st.session_state.library_tracks = _tracks
+        except Exception as _err:
+            st.error(f'Erro ao baixar músicas: {_err}')
+            if st.button('Tentar novamente'):
+                st.rerun()
+            st.stop()
+
         _bar.empty()
-        _pct_label.empty()
-        st.session_state.pop('library_loaded', None)
-        st.error(f"Erro ao carregar biblioteca do Spotify: {_lib_err}")
-        if st.button("Tentar novamente"):
-            st.rerun()
-        st.stop()
 
-    _phase_label.empty()
-    _bar.empty()
-    _pct_label.empty()
+    # Fase 2: busca dados dos artistas com spinner simples
+    with st.spinner(f'Carregando gêneros dos artistas ({len(st.session_state.library_tracks)} músicas)...'):
+        try:
+            _artists = get_artists_for_tracks(sp, st.session_state.library_tracks)
+            st.session_state.library_genres = sorted({g for a in _artists for g in a['genres']})
+            st.session_state.library_artists = sorted({a['name'] for a in _artists})
+            st.session_state.library_loaded = True
+        except Exception as _lib_err:
+            st.session_state.pop('library_loaded', None)
+            st.error(f'Erro ao carregar artistas: {_lib_err}')
+            if st.button('Tentar novamente'):
+                st.rerun()
+            st.stop()
 
 if 'spotify_playlists' not in st.session_state:
     with st.spinner("Carregando suas playlists do Spotify..."):
