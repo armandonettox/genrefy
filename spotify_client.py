@@ -80,8 +80,8 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_cal
     seen = set()
     artist_ids = []
     for t in tracks:
-        aid = t['track']['artists'][0]['id']
-        if aid not in seen:
+        aid = t['track']['artists'][0].get('id')
+        if aid and aid not in seen:
             seen.add(aid)
             artist_ids.append(aid)
 

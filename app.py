@@ -251,7 +251,7 @@ if "sp" not in st.session_state:
 sp = st.session_state.sp
 playlists = st.session_state.playlists
 
-if 'library_genres' not in st.session_state:
+if not st.session_state.get('library_genres'):
     st.markdown(
         "<p style='color:#B3B3B3;font-size:0.85rem;margin-bottom:4px'>"
         "Isso leva alguns segundos na primeira vez.</p>",
