@@ -32,7 +32,7 @@ from commands.reload import run_reload
 from spotify_client import (
     create_auth_manager,
     create_spotify_client,
-    get_library_genres_and_artists,
+    get_library_data,
     get_user_playlists,
     is_authenticated,
 )
@@ -251,6 +251,13 @@ if "sp" not in st.session_state:
 sp = st.session_state.sp
 playlists = st.session_state.playlists
 
+if 'library_genres' not in st.session_state:
+    with st.spinner("Carregando sua biblioteca do Spotify..."):
+        genres, artists, tracks = get_library_data(sp)
+        st.session_state.library_genres = genres
+        st.session_state.library_artists = artists
+        st.session_state.library_tracks = tracks
+
 if 'spotify_playlists' not in st.session_state:
     with st.spinner("Carregando suas playlists do Spotify..."):
         st.session_state.spotify_playlists = get_user_playlists(sp)
@@ -416,12 +423,6 @@ with tab_sync:
                     key=f"cfg_{i}_id",
                 )
 
-                if 'library_genres' not in st.session_state:
-                    with st.spinner("Carregando gêneros da biblioteca..."):
-                        genres, artists = get_library_genres_and_artists(sp)
-                        st.session_state.library_genres = genres
-                        st.session_state.library_artists = artists
-
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     st.multiselect(
@@ -496,7 +497,12 @@ with tab_sync:
             st.session_state.reload_pending = False
             with st.status("Sincronizando...", expanded=True) as status:
                 try:
-                    _, summary = run_reload(sp, selected, progress_callback=status.write)
+                    _, summary = run_reload(
+                        sp,
+                        selected,
+                        progress_callback=status.write,
+                        cached_tracks=st.session_state.get('library_tracks'),
+                    )
                     status.update(label="Sincronização concluída!", state="complete", expanded=False)
                 except Exception as exc:
                     status.update(label="Erro durante a sincronização", state="error")
@@ -536,7 +542,11 @@ with tab_check:
             missing = None
             with st.status("Verificando artistas...", expanded=True) as status:
                 try:
-                    missing = run_check(sp, playlists)
+                    missing = run_check(
+                        sp,
+                        playlists,
+                        cached_tracks=st.session_state.get('library_tracks'),
+                    )
                     status.update(label="Verificação concluída!", state="complete", expanded=False)
                 except Exception as exc:
                     status.update(label="Erro na verificação", state="error")

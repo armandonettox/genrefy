@@ -29,7 +29,7 @@ def _remove_all_playlist_tracks(sp, pid):
             break
 
 
-def run_reload(sp, playlists, progress_callback=None) -> tuple[list[str], dict]:
+def run_reload(sp, playlists, progress_callback=None, cached_tracks=None) -> tuple[list[str], dict]:
     """Retorna (logs, summary). summary e {nome_playlist: contagem_de_tracks}."""
     logs = []
     summary = {}
@@ -39,8 +39,8 @@ def run_reload(sp, playlists, progress_callback=None) -> tuple[list[str], dict]:
         if progress_callback:
             progress_callback(msg)
 
-    # Busca todas as musicas curtidas e decora com generos dos artistas
-    tracks = get_saved_tracks(sp)
+    # Usa tracks cacheados da sessao se disponivel, senao busca na API
+    tracks = cached_tracks if cached_tracks is not None else get_saved_tracks(sp)
     log(f'Successfully loaded {len(tracks)} songs')
 
     decorated_tracks = decorate_artist_genres(sp, tracks, progress_callback=log)

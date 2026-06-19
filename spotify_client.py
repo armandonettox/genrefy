@@ -114,6 +114,16 @@ def get_user_playlists(sp: spotipy.Spotify) -> list[dict]:
     return playlists
 
 
+def get_library_data(sp: spotipy.Spotify, progress_callback=None) -> tuple[list[str], list[str], list[dict]]:
+    tracks = get_saved_tracks(sp)
+    if progress_callback:
+        progress_callback(f'{len(tracks)} músicas carregadas, buscando gêneros...')
+    artists = get_artists_for_tracks(sp, tracks, progress_callback=progress_callback)
+    all_genres = sorted({g for a in artists for g in a['genres']})
+    all_artists = sorted({a['name'] for a in artists})
+    return all_genres, all_artists, tracks
+
+
 def get_library_genres_and_artists(sp: spotipy.Spotify) -> tuple[list[str], list[str]]:
     tracks = get_saved_tracks(sp)
     artists = get_artists_for_tracks(sp, tracks)
