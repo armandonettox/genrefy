@@ -17,7 +17,6 @@
 import json
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import spotipy
@@ -88,24 +87,16 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_cal
     total = len(artist_ids)
     artists = []
 
-    def fetch(aid):
-        return sp.artist(aid)
-
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = {executor.submit(fetch, aid): aid for aid in artist_ids}
-        done = 0
-        for future in as_completed(futures):
-            done += 1
-            if on_progress:
-                on_progress(done, total)
-            if progress_callback and done % 20 == 0:
-                progress_callback(f'Carregando artistas: {done}/{total}...')
-            elif done % 50 == 0:
-                logger.info(f'Carregando artistas {done}/{total}...')
-            try:
-                artists.append(future.result())
-            except Exception as e:
-                logger.warning(f'Erro ao carregar artista {futures[future]}: {e}')
+    for i, aid in enumerate(artist_ids):
+        try:
+            artists.append(sp.artist(aid))
+        except Exception as e:
+            logger.warning(f'Erro ao carregar artista {aid}: {e}')
+        done = i + 1
+        if progress_callback and done % 20 == 0:
+            progress_callback(f'Carregando artistas: {done}/{total}...')
+        elif done % 50 == 0:
+            logger.info(f'Carregando artistas {done}/{total}...')
 
     logger.info(f'Artistas carregados: {len(artists)}/{total}')
 
@@ -138,13 +129,9 @@ def get_library_data(sp: spotipy.Spotify, on_progress=None) -> tuple[list[str], 
     tracks = get_saved_tracks(sp, on_progress=tracks_progress)
 
     if on_progress:
-        on_progress(0.0, 'Artistas: carregando...')
+        on_progress(0.5, 'Carregando dados dos artistas...')
 
-    def artist_progress(done, total):
-        if on_progress and (done % 10 == 0 or done == total):
-            on_progress(done / total, f'Artistas: {done}/{total}')
-
-    artists = get_artists_for_tracks(sp, tracks, on_progress=artist_progress)
+    artists = get_artists_for_tracks(sp, tracks)
     all_genres = sorted({g for a in artists for g in a['genres']})
     all_artists = sorted({a['name'] for a in artists})
     return all_genres, all_artists, tracks
