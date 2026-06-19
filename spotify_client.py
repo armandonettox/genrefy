@@ -17,6 +17,7 @@
 import json
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import spotipy
@@ -85,34 +86,32 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_cal
             artist_ids.append(aid)
 
     total = len(artist_ids)
-    # Spotify aceita ate 50 IDs por chamada — reduz de ~500 para ~10 requisicoes
-    # Chamadas sequenciais evitam problemas de thread-safety do spotipy
-    batches = [artist_ids[i:i + 50] for i in range(0, total, 50)]
     artists = []
-    done = 0
 
-    first_error = None
-    for batch in batches:
-        try:
-            result = [a for a in sp.artists(batch)['artists'] if a]
-            artists.extend(result)
-            done += len(result)
-        except Exception as e:
-            if first_error is None:
-                first_error = e
-            logger.warning(f'Erro ao carregar lote de artistas: {e}')
-        if on_progress:
-            on_progress(min(done, total), total)
-        if progress_callback:
-            progress_callback(f'Carregando artistas: {min(done, total)}/{total}...')
+    def fetch(aid):
+        return sp.artist(aid)
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {executor.submit(fetch, aid): aid for aid in artist_ids}
+        done = 0
+        for future in as_completed(futures):
+            done += 1
+            if on_progress:
+                on_progress(done, total)
+            if progress_callback and done % 20 == 0:
+                progress_callback(f'Carregando artistas: {done}/{total}...')
+            elif done % 50 == 0:
+                logger.info(f'Carregando artistas {done}/{total}...')
+            try:
+                artists.append(future.result())
+            except Exception as e:
+                logger.warning(f'Erro ao carregar artista {futures[future]}: {e}')
 
     logger.info(f'Artistas carregados: {len(artists)}/{total}')
 
     if not artists and total > 0:
-        detail = f' Primeiro erro: {first_error}' if first_error else ''
         raise RuntimeError(
-            f'Nenhum artista retornado pela API do Spotify '
-            f'({total} IDs enviados, 0 recebidos).{detail}'
+            f'Nenhum artista retornado pela API do Spotify ({total} IDs enviados, 0 recebidos).'
         )
 
     return artists
