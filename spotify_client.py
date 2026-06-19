@@ -86,17 +86,28 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_cal
 
     total = len(artist_ids)
     artists = []
+    batch_size = 50
+    num_batches = (total + batch_size - 1) // batch_size
 
-    for i, aid in enumerate(artist_ids):
+    for batch_num, i in enumerate(range(0, total, batch_size)):
+        batch = artist_ids[i:i + batch_size]
         try:
-            artists.append(sp.artist(aid))
+            result = sp.artists(batch)
+            batch_artists = [a for a in result.get('artists', []) if a]
+            artists.extend(batch_artists)
+            logger.info(f'Lote {batch_num + 1}/{num_batches}: {len(batch_artists)} artistas')
         except Exception as e:
-            logger.warning(f'Erro ao carregar artista {aid}: {e}')
-        done = i + 1
-        if progress_callback and done % 20 == 0:
-            progress_callback(f'Carregando artistas: {done}/{total}...')
-        elif done % 50 == 0:
-            logger.info(f'Carregando artistas {done}/{total}...')
+            logger.warning(f'Lote {batch_num + 1} falhou ({type(e).__name__}), tentando individual...')
+            for aid in batch:
+                try:
+                    artists.append(sp.artist(aid))
+                except Exception as e2:
+                    logger.warning(f'Artista {aid}: {e2}')
+
+        if progress_callback:
+            progress_callback(f'Carregando artistas: {min(i + batch_size, total)}/{total}...')
+        elif on_progress:
+            on_progress(min(i + batch_size, total), total)
 
     logger.info(f'Artistas carregados: {len(artists)}/{total}')
 

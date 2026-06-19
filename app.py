@@ -271,19 +271,27 @@ if not st.session_state.get('library_loaded'):
 
         _bar.empty()
 
-    # Fase 2: busca dados dos artistas com spinner simples
-    with st.spinner(f'Carregando gêneros dos artistas ({len(st.session_state.library_tracks)} músicas)...'):
-        try:
-            _artists = get_artists_for_tracks(sp, st.session_state.library_tracks)
-            st.session_state.library_genres = sorted({g for a in _artists for g in a['genres']})
-            st.session_state.library_artists = sorted({a['name'] for a in _artists})
-            st.session_state.library_loaded = True
-        except Exception as _lib_err:
-            st.session_state.pop('library_loaded', None)
-            st.error(f'Erro ao carregar artistas: {_lib_err}')
-            if st.button('Tentar novamente'):
-                st.rerun()
-            st.stop()
+    # Fase 2: busca dados dos artistas em lotes de 50
+    _bar2 = st.empty()
+
+    def _on_artists_progress(done: int, total: int):
+        _bar2.progress(done / total, text=f'Carregando artistas: {done} / {total}')
+
+    try:
+        _artists = get_artists_for_tracks(
+            sp, st.session_state.library_tracks, on_progress=_on_artists_progress
+        )
+        st.session_state.library_genres = sorted({g for a in _artists for g in a['genres']})
+        st.session_state.library_artists = sorted({a['name'] for a in _artists})
+        st.session_state.library_loaded = True
+    except Exception as _lib_err:
+        st.session_state.pop('library_loaded', None)
+        st.error(f'Erro ao carregar artistas: {_lib_err}')
+        if st.button('Tentar novamente'):
+            st.rerun()
+        st.stop()
+
+    _bar2.empty()
 
 if 'spotify_playlists' not in st.session_state:
     with st.spinner("Carregando suas playlists do Spotify..."):
