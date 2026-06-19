@@ -58,12 +58,17 @@ def is_authenticated(auth_manager: SpotifyOAuth) -> bool:
         return False
 
 
-def get_saved_tracks(sp: spotipy.Spotify) -> list[dict]:
+def get_saved_tracks(sp: spotipy.Spotify, on_progress=None) -> list[dict]:
     tracks = []
     offset = 0
+    total = None
     while True:
         results = sp.current_user_saved_tracks(limit=50, offset=offset)
+        if total is None:
+            total = results['total']
         tracks.extend(results['items'])
+        if on_progress and total:
+            on_progress(len(tracks), total)
         if not results['next']:
             break
         offset += 50
@@ -71,7 +76,7 @@ def get_saved_tracks(sp: spotipy.Spotify) -> list[dict]:
     return tracks
 
 
-def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_callback=None) -> list[dict]:
+def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_callback=None, on_progress=None) -> list[dict]:
     seen = set()
     artist_ids = []
     for t in tracks:
@@ -91,6 +96,8 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_cal
         done = 0
         for future in as_completed(futures):
             done += 1
+            if on_progress:
+                on_progress(done, total)
             if progress_callback and done % 20 == 0:
                 progress_callback(f'Carregando artistas: {done}/{total}...')
             elif done % 50 == 0:
@@ -114,11 +121,20 @@ def get_user_playlists(sp: spotipy.Spotify) -> list[dict]:
     return playlists
 
 
-def get_library_data(sp: spotipy.Spotify, progress_callback=None) -> tuple[list[str], list[str], list[dict]]:
-    tracks = get_saved_tracks(sp)
-    if progress_callback:
-        progress_callback(f'{len(tracks)} músicas carregadas, buscando gêneros...')
-    artists = get_artists_for_tracks(sp, tracks, progress_callback=progress_callback)
+def get_library_data(sp: spotipy.Spotify, on_progress=None) -> tuple[list[str], list[str], list[dict]]:
+    """Retorna (genres, artists, tracks). on_progress(pct: float 0-1, msg: str) e chamado durante o carregamento."""
+
+    def tracks_progress(done, total):
+        if on_progress:
+            on_progress(done / total * 0.3, f'Músicas: {done}/{total}')
+
+    tracks = get_saved_tracks(sp, on_progress=tracks_progress)
+
+    def artist_progress(done, total):
+        if on_progress:
+            on_progress(0.3 + done / total * 0.7, f'Artistas: {done}/{total}')
+
+    artists = get_artists_for_tracks(sp, tracks, on_progress=artist_progress)
     all_genres = sorted({g for a in artists for g in a['genres']})
     all_artists = sorted({a['name'] for a in artists})
     return all_genres, all_artists, tracks

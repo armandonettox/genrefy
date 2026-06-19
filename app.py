@@ -252,11 +252,18 @@ sp = st.session_state.sp
 playlists = st.session_state.playlists
 
 if 'library_genres' not in st.session_state:
-    with st.spinner("Carregando sua biblioteca do Spotify..."):
-        genres, artists, tracks = get_library_data(sp)
-        st.session_state.library_genres = genres
-        st.session_state.library_artists = artists
-        st.session_state.library_tracks = tracks
+    _bar = st.progress(0.0, text="Carregando sua biblioteca do Spotify...")
+    _status = st.empty()
+
+    def _on_library_progress(pct: float, msg: str):
+        _bar.progress(pct, text=msg)
+
+    genres, artists, tracks = get_library_data(sp, on_progress=_on_library_progress)
+    _bar.progress(1.0, text="Biblioteca carregada!")
+    _status.empty()
+    st.session_state.library_genres = genres
+    st.session_state.library_artists = artists
+    st.session_state.library_tracks = tracks
 
 if 'spotify_playlists' not in st.session_state:
     with st.spinner("Carregando suas playlists do Spotify..."):
