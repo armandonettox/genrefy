@@ -91,7 +91,7 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_cal
     def fetch(aid):
         return sp.artist(aid)
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    with ThreadPoolExecutor(max_workers=5) as executor:
         futures = {executor.submit(fetch, aid): aid for aid in artist_ids}
         done = 0
         for future in as_completed(futures):
@@ -141,7 +141,7 @@ def get_library_data(sp: spotipy.Spotify, on_progress=None) -> tuple[list[str], 
         on_progress(0.0, 'Artistas: carregando...')
 
     def artist_progress(done, total):
-        if on_progress:
+        if on_progress and (done % 10 == 0 or done == total):
             on_progress(done / total, f'Artistas: {done}/{total}')
 
     artists = get_artists_for_tracks(sp, tracks, on_progress=artist_progress)
