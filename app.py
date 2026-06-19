@@ -18,8 +18,6 @@ import base64
 import json
 import logging
 import os
-import threading
-import time
 from pathlib import Path
 
 import pandas as pd
@@ -273,55 +271,27 @@ if not st.session_state.get('library_loaded'):
 
         _bar.empty()
 
-    # Fase 2: busca dados dos artistas em thread de fundo para nao bloquear o Streamlit
-    if 'artist_load_state' not in st.session_state:
-        _state = {'status': 'running', 'done': 0, 'total': 0, 'error': None}
-        st.session_state.artist_load_state = _state
+    # Fase 2: busca dados dos artistas em lotes de 50
+    _bar2 = st.empty()
 
-        def _bg_load(sp_client, tracks, state):
-            try:
-                def _prog(done, total):
-                    state['done'] = done
-                    state['total'] = total
-                artists = get_artists_for_tracks(sp_client, tracks, on_progress=_prog)
-                state['genres'] = sorted({g for a in artists for g in a['genres']})
-                state['artist_names'] = sorted({a['name'] for a in artists})
-                state['status'] = 'done'
-            except Exception as exc:
-                state['error'] = str(exc)
-                state['status'] = 'error'
+    def _on_artists_progress(done: int, total: int):
+        _bar2.progress(done / total, text=f'Carregando artistas: {done} / {total}')
 
-        threading.Thread(
-            target=_bg_load,
-            args=(sp, st.session_state.library_tracks, _state),
-            daemon=True,
-        ).start()
-
-    _state = st.session_state.artist_load_state
-
-    if _state['status'] == 'running':
-        _done = _state.get('done', 0)
-        _total = _state.get('total', 0)
-        if _total > 0:
-            st.progress(_done / _total, text=f'Carregando artistas: {_done} / {_total}')
-        else:
-            st.progress(0.0, text='Carregando artistas...')
-        time.sleep(0.5)
-        st.rerun()
-
-    elif _state['status'] == 'error':
-        st.session_state.pop('artist_load_state', None)
-        st.error(f'Erro ao carregar artistas: {_state["error"]}')
+    try:
+        _artists = get_artists_for_tracks(
+            sp, st.session_state.library_tracks, on_progress=_on_artists_progress
+        )
+        st.session_state.library_genres = sorted({g for a in _artists for g in a['genres']})
+        st.session_state.library_artists = sorted({a['name'] for a in _artists})
+        st.session_state.library_loaded = True
+    except Exception as _lib_err:
+        st.session_state.pop('library_loaded', None)
+        st.error(f'Erro ao carregar artistas: {_lib_err}')
         if st.button('Tentar novamente'):
             st.rerun()
         st.stop()
 
-    elif _state['status'] == 'done':
-        st.session_state.library_genres = _state['genres']
-        st.session_state.library_artists = _state['artist_names']
-        st.session_state.library_loaded = True
-        st.session_state.pop('artist_load_state', None)
-        st.rerun()
+    _bar2.empty()
 
 if 'spotify_playlists' not in st.session_state:
     with st.spinner("Carregando suas playlists do Spotify..."):
