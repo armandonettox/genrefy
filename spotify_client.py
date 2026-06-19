@@ -17,7 +17,6 @@
 import json
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import spotipy
@@ -87,26 +86,22 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_cal
 
     total = len(artist_ids)
     # Spotify aceita ate 50 IDs por chamada — reduz de ~500 para ~10 requisicoes
+    # Chamadas sequenciais evitam problemas de thread-safety do spotipy
     batches = [artist_ids[i:i + 50] for i in range(0, total, 50)]
     artists = []
     done = 0
 
-    def fetch_batch(batch):
-        return [a for a in sp.artists(batch)['artists'] if a]
-
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = {executor.submit(fetch_batch, b): i for i, b in enumerate(batches)}
-        for future in as_completed(futures):
-            try:
-                result = future.result()
-                artists.extend(result)
-                done += len(result)
-            except Exception as e:
-                logger.warning(f'Erro ao carregar lote de artistas: {e}')
-            if on_progress:
-                on_progress(min(done, total), total)
-            if progress_callback:
-                progress_callback(f'Carregando artistas: {min(done, total)}/{total}...')
+    for batch in batches:
+        try:
+            result = [a for a in sp.artists(batch)['artists'] if a]
+            artists.extend(result)
+            done += len(result)
+        except Exception as e:
+            logger.warning(f'Erro ao carregar lote de artistas: {e}')
+        if on_progress:
+            on_progress(min(done, total), total)
+        if progress_callback:
+            progress_callback(f'Carregando artistas: {min(done, total)}/{total}...')
 
     logger.info(f'Artistas carregados: {len(artists)}/{total}')
     return artists
