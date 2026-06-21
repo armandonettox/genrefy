@@ -20,8 +20,8 @@ import os
 import time
 from pathlib import Path
 
-import requests as http_requests
 import spotipy
+import spotipy.exceptions
 from dotenv import load_dotenv
 from spotipy.oauth2 import SpotifyOAuth
 
@@ -31,9 +31,6 @@ logger = logging.getLogger(__name__)
 
 _CACHE_DIR = Path(os.getenv('ARTIST_CACHE_DIR', '/app/cache'))
 _CACHE_TTL = 86400  # 24 horas
-
-_ARTISTS_URL = 'https://api.spotify.com/v1/artists'
-
 
 def _artist_cache_path(user_id: str) -> Path:
     return _CACHE_DIR / f'artists_{user_id}.json'
@@ -99,15 +96,6 @@ def is_authenticated(auth_manager: SpotifyOAuth) -> bool:
         return False
 
 
-def _get_access_token(sp: spotipy.Spotify) -> str:
-    """Retorna o access token atual sem fazer novas chamadas de auth."""
-    token_info = sp.auth_manager.get_cached_token()
-    if token_info and not sp.auth_manager.is_token_expired(token_info):
-        return token_info['access_token']
-    token_info = sp.auth_manager.refresh_access_token(token_info['refresh_token'])
-    return token_info['access_token']
-
-
 def get_saved_tracks(sp: spotipy.Spotify, on_progress=None) -> list[dict]:
     tracks = []
     offset = 0
@@ -137,44 +125,38 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_cal
 
     total = len(artist_ids)
     artists = []
-    batch_size = 20  # menor que 50 para evitar URLs longas
+    batch_size = 50
     num_batches = (total + batch_size - 1) // batch_size
-
-    # Usa requests direto com o token OAuth ja obtido (sem nova chamada de auth)
-    try:
-        token = _get_access_token(sp)
-    except Exception as e:
-        logger.error(f'Nao foi possivel obter token: {e}')
-        return artists
-
-    session = http_requests.Session()
-    session.headers['Authorization'] = f'Bearer {token}'
+    use_individual = False
 
     for batch_num, i in enumerate(range(0, total, batch_size)):
         batch = artist_ids[i:i + batch_size]
-        try:
-            r = session.get(
-                _ARTISTS_URL,
-                params={'ids': ','.join(batch)},
-                timeout=(5, 10),  # connect=5s, read=10s
-            )
-            if r.status_code == 200:
-                batch_artists = [a for a in r.json().get('artists', []) if a]
-                artists.extend(batch_artists)
-                logger.info(f'Lote {batch_num + 1}/{num_batches}: {len(batch_artists)} artistas')
-            elif r.status_code == 401:
-                # Token expirou durante o loop — tenta renovar uma vez
-                logger.warning('Token expirou, renovando...')
-                token = sp.auth_manager.refresh_access_token(
-                    sp.auth_manager.get_cached_token().get('refresh_token', '')
-                )['access_token']
-                session.headers['Authorization'] = f'Bearer {token}'
-            else:
-                logger.error(f'Lote {batch_num + 1}: HTTP {r.status_code} — {r.text[:200]}')
-        except http_requests.Timeout:
-            logger.error(f'Lote {batch_num + 1}: timeout apos 10s')
-        except Exception as e:
-            logger.error(f'Lote {batch_num + 1}: {type(e).__name__}: {e}')
+        fetched = []
+
+        if not use_individual:
+            try:
+                result = sp.artists(batch)
+                fetched = [a for a in result.get('artists', []) if a]
+                logger.info(f'Lote {batch_num + 1}/{num_batches}: {len(fetched)} artistas (batch)')
+            except spotipy.exceptions.SpotifyException as e:
+                if e.http_status in (400, 403):
+                    logger.warning(f'Batch bloqueado (HTTP {e.http_status}), alternando para chamadas individuais')
+                    use_individual = True
+                else:
+                    logger.error(f'Lote {batch_num + 1}: SpotifyException HTTP {e.http_status}: {e}')
+            except Exception as e:
+                logger.error(f'Lote {batch_num + 1}: {type(e).__name__}: {e}')
+
+        if use_individual:
+            for aid in batch:
+                try:
+                    a = sp.artist(aid)
+                    fetched.append(a)
+                except Exception as e:
+                    logger.error(f'Artista {aid}: {type(e).__name__}: {e}')
+            logger.info(f'Lote {batch_num + 1}/{num_batches}: {len(fetched)} artistas (individual)')
+
+        artists.extend(fetched)
 
         if progress_callback:
             progress_callback(f'Carregando artistas: {min(i + batch_size, total)}/{total}...')
