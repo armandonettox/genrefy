@@ -636,25 +636,6 @@ with tab_check:
 # ── BUSCAR ────────────────────────────────────────────────────────────────────
 with tab_info:
     st.write("Consulta os generos de um artista pelo ID ou URL do Spotify.")
-    artist_input = st.text_input(
-        "Artist ID ou URL do Spotify",
-        placeholder="Ex: 3TVXtAsR1Inumwj472S9r4 ou https://open.spotify.com/artist/...",
-        key="buscar_input",
-    )
-
-    if st.button("Buscar Generos"):
-        if not artist_input.strip():
-            st.session_state.buscar_result = None
-            st.session_state.buscar_error = "Informe um Artist ID ou URL do Spotify."
-        else:
-            with st.spinner("Buscando..."):
-                try:
-                    _r = run_info(sp, artist_input.strip())
-                    st.session_state.buscar_result = _r
-                    st.session_state.buscar_error = None
-                except Exception as exc:
-                    st.session_state.buscar_result = None
-                    st.session_state.buscar_error = str(exc)
 
     if st.session_state.get("buscar_error"):
         st.warning(st.session_state.buscar_error)
@@ -666,6 +647,28 @@ with tab_info:
         else:
             st.warning("Nenhum genero encontrado para este artista.")
         st.caption(f"Campos da API: {_r.get('_raw_keys', [])}")
+
+    artist_input = st.text_input(
+        "Artist ID ou URL do Spotify",
+        placeholder="Ex: 3TVXtAsR1Inumwj472S9r4 ou https://open.spotify.com/artist/...",
+        key="buscar_input",
+    )
+
+    if st.button("Buscar Generos"):
+        if not artist_input.strip():
+            st.session_state.buscar_result = None
+            st.session_state.buscar_error = "Informe um Artist ID ou URL do Spotify."
+            st.rerun()
+        else:
+            with st.spinner("Buscando..."):
+                try:
+                    _r = run_info(sp, artist_input.strip())
+                    st.session_state.buscar_result = _r
+                    st.session_state.buscar_error = None
+                except Exception as exc:
+                    st.session_state.buscar_result = None
+                    st.session_state.buscar_error = str(exc)
+            st.rerun()
 
 # ── EXPORTAR ──────────────────────────────────────────────────────────────────
 with tab_genres:
