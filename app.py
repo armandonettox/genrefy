@@ -657,16 +657,18 @@ with tab_info:
     )
 
     if st.button("Buscar Generos"):
+        st.toast("Buscando...")
         if not artist_input.strip():
             st.warning("Informe um Artist ID ou URL do Spotify.")
         else:
             try:
                 st.session_state.info_result = run_info(sp, artist_input.strip())
                 st.session_state.info_error = None
+                st.toast(f"Pronto: {st.session_state.info_result.get('name', '?')}")
             except Exception as exc:
                 st.session_state.info_result = None
                 st.session_state.info_error = str(exc)
-            st.rerun()
+                st.toast(f"Erro: {exc}")
 
 # ── EXPORTAR ──────────────────────────────────────────────────────────────────
 with tab_genres:
