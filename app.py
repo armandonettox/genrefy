@@ -635,15 +635,28 @@ with tab_check:
 
 # ── BUSCAR ────────────────────────────────────────────────────────────────────
 with tab_info:
-    st.subheader("Buscar")
-    st.write("Consulta os gêneros de um artista pelo ID ou URL do Spotify.")
+    # Mostra resultado antes do input para garantir visibilidade
+    _info_result = st.session_state.get("info_result")
+    _info_error = st.session_state.get("info_error")
 
+    if _info_error:
+        st.error(f"Erro: {_info_error}")
+    if _info_result:
+        st.markdown(f"### {_info_result['name']}")
+        if _info_result["genres"]:
+            st.markdown(" · ".join(f"`{g}`" for g in _info_result["genres"]))
+        else:
+            st.warning("Nenhum genero encontrado para este artista.")
+        st.caption(f"Campos da API: {_info_result.get('_raw_keys', [])}")
+
+    st.write("Consulta os generos de um artista pelo ID ou URL do Spotify.")
     artist_input = st.text_input(
         "Artist ID ou URL do Spotify",
         placeholder="Ex: 3TVXtAsR1Inumwj472S9r4 ou https://open.spotify.com/artist/...",
+        key="buscar_input",
     )
 
-    if st.button("Buscar Gêneros"):
+    if st.button("Buscar Generos"):
         if not artist_input.strip():
             st.warning("Informe um Artist ID ou URL do Spotify.")
         else:
@@ -653,18 +666,7 @@ with tab_info:
             except Exception as exc:
                 st.session_state.info_result = None
                 st.session_state.info_error = str(exc)
-
-    if st.session_state.get("info_error"):
-        st.error(f"Erro: {st.session_state.info_error}")
-
-    result = st.session_state.get("info_result")
-    if result:
-        st.markdown(f"### {result['name']}")
-        if result["genres"]:
-            st.markdown(" · ".join(f"`{g}`" for g in result["genres"]))
-        else:
-            st.warning("Nenhum gênero encontrado para este artista.")
-        st.caption(f"Campos da API: {result.get('_raw_keys', [])}")
+            st.rerun()
 
 # ── EXPORTAR ──────────────────────────────────────────────────────────────────
 with tab_genres:
