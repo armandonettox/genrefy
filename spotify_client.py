@@ -31,7 +31,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 _CACHE_DIR = Path(os.getenv('ARTIST_CACHE_DIR', '/app/cache'))
-_CACHE_TTL = 86400  # 24 horas
+_CACHE_TTL = 3600  # 1 hora
 
 def _artist_cache_path(user_id: str) -> Path:
     return _CACHE_DIR / f'artists_{user_id}.json'
