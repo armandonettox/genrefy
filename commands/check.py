@@ -25,7 +25,7 @@ def run_check(sp, playlists, cached_tracks=None) -> list[dict]:
 
     missing = [
         a for a in artist_data
-        if not any(g in all_genres for g in a['genres'])
+        if not any(g in all_genres for g in a.get('genres', []))
     ]
 
     all_overrides = [name for p in playlists for name in p.get('aoverride', [])]
@@ -35,7 +35,7 @@ def run_check(sp, playlists, cached_tracks=None) -> list[dict]:
     return [
         {
             'name': a['name'],
-            'genres': a['genres'],
+            'genres': a.get('genres', []),
             'image': a['images'][0]['url'] if a.get('images') else '',
         }
         for a in missing

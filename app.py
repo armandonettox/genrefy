@@ -305,7 +305,7 @@ if not st.session_state.get('library_loaded'):
         if _artists:
             save_artist_cache(_user_id, _artists)
 
-    st.session_state.library_genres = sorted({g for a in _artists for g in a['genres']})
+    st.session_state.library_genres = sorted({g for a in _artists for g in a.get('genres', [])})
     st.session_state.library_artists = sorted({a['name'] for a in _artists})
     st.session_state.library_loaded = True
     st.session_state.library_genres_ok = bool(_artists)

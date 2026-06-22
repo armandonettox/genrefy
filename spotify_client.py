@@ -199,7 +199,7 @@ def get_library_data(sp: spotipy.Spotify, on_progress=None) -> tuple[list[str], 
         on_progress(0.5, 'Carregando dados dos artistas...')
 
     artists, _ = get_artists_for_tracks(sp, tracks)
-    all_genres = sorted({g for a in artists for g in a['genres']})
+    all_genres = sorted({g for a in artists for g in a.get('genres', [])})
     all_artists = sorted({a['name'] for a in artists})
     return all_genres, all_artists, tracks
 
@@ -207,7 +207,7 @@ def get_library_data(sp: spotipy.Spotify, on_progress=None) -> tuple[list[str], 
 def get_library_genres_and_artists(sp: spotipy.Spotify) -> tuple[list[str], list[str]]:
     tracks = get_saved_tracks(sp)
     artists, _ = get_artists_for_tracks(sp, tracks)
-    all_genres = sorted({g for a in artists for g in a['genres']})
+    all_genres = sorted({g for a in artists for g in a.get('genres', [])})
     all_artists = sorted({a['name'] for a in artists})
     return all_genres, all_artists
 
@@ -216,7 +216,7 @@ def decorate_artist_genres(sp: spotipy.Spotify, tracks: list[dict], progress_cal
     if progress_callback:
         progress_callback('Buscando generos dos artistas...')
     artist_data, _ = get_artists_for_tracks(sp, tracks, progress_callback=progress_callback)
-    artist_map = {a['id']: a['genres'] for a in artist_data}
+    artist_map = {a['id']: a.get('genres', []) for a in artist_data}
 
     decorated = []
     for track in tracks:
