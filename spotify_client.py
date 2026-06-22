@@ -114,7 +114,8 @@ def get_saved_tracks(sp: spotipy.Spotify, on_progress=None) -> list[dict]:
     return tracks
 
 
-def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_callback=None, on_progress=None) -> list[dict]:
+def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_callback=None, on_progress=None) -> tuple[list[dict], list[str]]:
+    """Retorna (artistas, erros). erros e uma lista de strings descrevendo falhas."""
     seen = set()
     artist_ids = []
     for t in tracks:
@@ -125,6 +126,7 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_cal
 
     total = len(artist_ids)
     artists = []
+    errors = []
     batch_size = 50
     num_batches = (total + batch_size - 1) // batch_size
     use_individual = False
@@ -139,13 +141,17 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_cal
                 fetched = [a for a in result.get('artists', []) if a]
                 logger.info(f'Lote {batch_num + 1}/{num_batches}: {len(fetched)} artistas (batch)')
             except spotipy.exceptions.SpotifyException as e:
+                msg = f'sp.artists() HTTP {e.http_status}: {e}'
+                errors.append(msg)
+                logger.warning(msg)
                 if e.http_status in (400, 403):
-                    logger.warning(f'Batch bloqueado (HTTP {e.http_status}), alternando para chamadas individuais')
+                    logger.warning('Alternando para chamadas individuais')
                     use_individual = True
-                else:
-                    logger.error(f'Lote {batch_num + 1}: SpotifyException HTTP {e.http_status}: {e}')
             except Exception as e:
-                logger.error(f'Lote {batch_num + 1}: {type(e).__name__}: {e}')
+                msg = f'sp.artists() {type(e).__name__}: {e}'
+                errors.append(msg)
+                logger.error(msg)
+                use_individual = True
 
         if use_individual:
             for aid in batch:
@@ -153,7 +159,9 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_cal
                     a = sp.artist(aid)
                     fetched.append(a)
                 except Exception as e:
-                    logger.error(f'Artista {aid}: {type(e).__name__}: {e}')
+                    msg = f'sp.artist({aid}) {type(e).__name__}: {e}'
+                    errors.append(msg)
+                    logger.error(msg)
             logger.info(f'Lote {batch_num + 1}/{num_batches}: {len(fetched)} artistas (individual)')
 
         artists.extend(fetched)
@@ -164,7 +172,7 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_cal
             on_progress(min(i + batch_size, total), total)
 
     logger.info(f'Artistas carregados: {len(artists)}/{total}')
-    return artists
+    return artists, errors
 
 
 def get_user_playlists(sp: spotipy.Spotify) -> list[dict]:
@@ -190,7 +198,7 @@ def get_library_data(sp: spotipy.Spotify, on_progress=None) -> tuple[list[str], 
     if on_progress:
         on_progress(0.5, 'Carregando dados dos artistas...')
 
-    artists = get_artists_for_tracks(sp, tracks)
+    artists, _ = get_artists_for_tracks(sp, tracks)
     all_genres = sorted({g for a in artists for g in a['genres']})
     all_artists = sorted({a['name'] for a in artists})
     return all_genres, all_artists, tracks
@@ -198,7 +206,7 @@ def get_library_data(sp: spotipy.Spotify, on_progress=None) -> tuple[list[str], 
 
 def get_library_genres_and_artists(sp: spotipy.Spotify) -> tuple[list[str], list[str]]:
     tracks = get_saved_tracks(sp)
-    artists = get_artists_for_tracks(sp, tracks)
+    artists, _ = get_artists_for_tracks(sp, tracks)
     all_genres = sorted({g for a in artists for g in a['genres']})
     all_artists = sorted({a['name'] for a in artists})
     return all_genres, all_artists
@@ -207,7 +215,7 @@ def get_library_genres_and_artists(sp: spotipy.Spotify) -> tuple[list[str], list
 def decorate_artist_genres(sp: spotipy.Spotify, tracks: list[dict], progress_callback=None) -> list[dict]:
     if progress_callback:
         progress_callback('Buscando generos dos artistas...')
-    artist_data = get_artists_for_tracks(sp, tracks, progress_callback=progress_callback)
+    artist_data, _ = get_artists_for_tracks(sp, tracks, progress_callback=progress_callback)
     artist_map = {a['id']: a['genres'] for a in artist_data}
 
     decorated = []

@@ -285,10 +285,22 @@ if not st.session_state.get('library_loaded'):
         def _on_artists_progress(done: int, total: int):
             _bar2.progress(done / total, text=f'Carregando artistas: {done} / {total}')
 
-        _artists = get_artists_for_tracks(
-            sp, st.session_state.library_tracks, on_progress=_on_artists_progress
+        _tracks_in_state = st.session_state.library_tracks or []
+        _debug_tracks = len(_tracks_in_state)
+
+        _artists, _artist_errors = get_artists_for_tracks(
+            sp, _tracks_in_state, on_progress=_on_artists_progress
         )
         _bar2.empty()
+
+        st.session_state.artist_load_debug = {
+            'tracks': _debug_tracks,
+            'artists': len(_artists),
+            'errors': _artist_errors[:3] if _artist_errors else [],
+        }
+
+        if _artist_errors:
+            st.session_state.artist_load_errors = _artist_errors[:5]
 
         if _artists:
             save_artist_cache(_user_id, _artists)
@@ -358,11 +370,15 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 if not st.session_state.get("library_genres_ok", True):
+    _debug = st.session_state.get("artist_load_debug", {})
+    _debug_txt = f" | tracks={_debug.get('tracks','?')} artists={_debug.get('artists','?')} erros={_debug.get('errors','?')}" if _debug else ""
     _c1, _c2 = st.columns([5, 1])
-    _c1.warning("Generos dos artistas nao carregaram. Filtros de genero estarao vazios.")
+    _c1.warning(f"Generos dos artistas nao carregaram. Filtros de genero estarao vazios.{_debug_txt}")
     if _c2.button("Recarregar", key="retry_genres"):
         st.session_state.pop("library_loaded", None)
         st.session_state.pop("library_genres_ok", None)
+        st.session_state.pop("artist_load_errors", None)
+        st.session_state.pop("artist_load_debug", None)
         st.rerun()
 
 tab_sync, tab_check, tab_info, tab_genres = st.tabs(

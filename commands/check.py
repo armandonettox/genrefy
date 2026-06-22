@@ -19,7 +19,7 @@ from spotify_client import get_saved_tracks, get_artists_for_tracks
 
 def run_check(sp, playlists, cached_tracks=None) -> list[dict]:
     tracks = cached_tracks if cached_tracks is not None else get_saved_tracks(sp)
-    artist_data = get_artists_for_tracks(sp, tracks)
+    artist_data, _ = get_artists_for_tracks(sp, tracks)
 
     all_genres = [g for p in playlists for g in p['genres']]
 
