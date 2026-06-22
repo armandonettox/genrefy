@@ -14,6 +14,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+from spotify_client import get_genres_from_musicbrainz
+
+
 def run_info(sp, artist_input: str) -> dict:
     # Se for URL do Spotify, extrai o ID do artista
     if artist_input.startswith('https://'):
@@ -22,5 +25,9 @@ def run_info(sp, artist_input: str) -> dict:
         artist_id = artist_input
 
     data = sp.artist(artist_id)
+    genres = data.get('genres', [])
 
-    return {'name': data['name'], 'genres': data.get('genres', []), '_raw_keys': list(data.keys())}
+    if not genres:
+        genres = get_genres_from_musicbrainz(data['name'])
+
+    return {'name': data['name'], 'genres': genres, '_raw_keys': list(data.keys())}

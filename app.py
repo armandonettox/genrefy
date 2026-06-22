@@ -30,6 +30,7 @@ from commands.genres import run_genres
 from commands.info import run_info
 from commands.reload import run_reload
 from spotify_client import (
+    clear_artist_cache,
     create_auth_manager,
     create_spotify_client,
     get_artists_for_tracks,
@@ -275,6 +276,7 @@ if not st.session_state.get('library_loaded'):
 
     # Fase 2: busca dados dos artistas — tenta cache antes de chamar a API
     _user_id = sp.me().get('id', 'unknown')
+    st.session_state.library_user_id = _user_id
     _cached = load_artist_cache(_user_id)
 
     if _cached is not None:
@@ -285,11 +287,14 @@ if not st.session_state.get('library_loaded'):
         def _on_artists_progress(done: int, total: int):
             _bar2.progress(done / total, text=f'Carregando artistas: {done} / {total}')
 
+        def _on_mb_progress(done: int, total: int):
+            _bar2.progress(done / total, text=f'Buscando generos (MusicBrainz): {done} / {total}')
+
         _tracks_in_state = st.session_state.library_tracks or []
         _debug_tracks = len(_tracks_in_state)
 
         _artists, _artist_errors = get_artists_for_tracks(
-            sp, _tracks_in_state, on_progress=_on_artists_progress
+            sp, _tracks_in_state, on_progress=_on_artists_progress, on_mb_progress=_on_mb_progress
         )
         _bar2.empty()
 
@@ -308,7 +313,7 @@ if not st.session_state.get('library_loaded'):
     st.session_state.library_genres = sorted({g for a in _artists for g in a.get('genres', [])})
     st.session_state.library_artists = sorted({a['name'] for a in _artists})
     st.session_state.library_loaded = True
-    st.session_state.library_genres_ok = bool(_artists)
+    st.session_state.library_genres_ok = bool(st.session_state.library_genres)
 
 if 'spotify_playlists' not in st.session_state:
     with st.spinner("Carregando suas playlists do Spotify..."):
@@ -371,14 +376,14 @@ st.markdown(f"""
 
 if not st.session_state.get("library_genres_ok", True):
     _debug = st.session_state.get("artist_load_debug", {})
-    _debug_txt = f" | tracks={_debug.get('tracks','?')} artists={_debug.get('artists','?')} erros={_debug.get('errors','?')}" if _debug else ""
+    _debug_txt = f" | tracks={_debug.get('tracks','?')} artistas={_debug.get('artists','?')} erros={_debug.get('errors','?')}" if _debug else ""
     _c1, _c2 = st.columns([5, 1])
-    _c1.warning(f"Generos dos artistas nao carregaram. Filtros de genero estarao vazios.{_debug_txt}")
+    _c1.warning(f"Generos nao encontrados. Clique em Recarregar para buscar via MusicBrainz.{_debug_txt}")
     if _c2.button("Recarregar", key="retry_genres"):
-        st.session_state.pop("library_loaded", None)
-        st.session_state.pop("library_genres_ok", None)
-        st.session_state.pop("artist_load_errors", None)
-        st.session_state.pop("artist_load_debug", None)
+        clear_artist_cache(st.session_state.get("library_user_id", "unknown"))
+        for _k in ("library_loaded", "library_genres_ok", "library_genres", "library_artists",
+                   "library_tracks", "artist_load_errors", "artist_load_debug"):
+            st.session_state.pop(_k, None)
         st.rerun()
 
 tab_sync, tab_check, tab_info, tab_genres = st.tabs(
