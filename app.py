@@ -648,15 +648,23 @@ with tab_info:
             st.warning("Informe um Artist ID ou URL do Spotify.")
         else:
             try:
-                result = run_info(sp, artist_input.strip())
-                st.markdown(f"### {result['name']}")
-                if result["genres"]:
-                    st.markdown(" · ".join(f"`{g}`" for g in result["genres"]))
-                else:
-                    st.warning("Nenhum gênero encontrado para este artista.")
-                st.caption(f"Campos da API: {result.get('_raw_keys', [])}")
+                st.session_state.info_result = run_info(sp, artist_input.strip())
+                st.session_state.info_error = None
             except Exception as exc:
-                st.error(f"Erro: {exc}")
+                st.session_state.info_result = None
+                st.session_state.info_error = str(exc)
+
+    if st.session_state.get("info_error"):
+        st.error(f"Erro: {st.session_state.info_error}")
+
+    result = st.session_state.get("info_result")
+    if result:
+        st.markdown(f"### {result['name']}")
+        if result["genres"]:
+            st.markdown(" · ".join(f"`{g}`" for g in result["genres"]))
+        else:
+            st.warning("Nenhum gênero encontrado para este artista.")
+        st.caption(f"Campos da API: {result.get('_raw_keys', [])}")
 
 # ── EXPORTAR ──────────────────────────────────────────────────────────────────
 with tab_genres:
