@@ -23,4 +23,4 @@ def run_info(sp, artist_input: str) -> dict:
 
     data = sp.artist(artist_id)
 
-    return {'name': data['name'], 'genres': data['genres']}
+    return {'name': data['name'], 'genres': data.get('genres', []), '_raw_keys': list(data.keys())}

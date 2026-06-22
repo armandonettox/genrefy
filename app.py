@@ -677,6 +677,7 @@ with tab_info:
                     st.markdown(" · ".join(f"`{g}`" for g in result["genres"]))
                 else:
                     st.info("Nenhum gênero encontrado para este artista.")
+                st.caption(f"Campos retornados pela API: {result.get('_raw_keys', [])}")
 
 # ── EXPORTAR ──────────────────────────────────────────────────────────────────
 with tab_genres:
