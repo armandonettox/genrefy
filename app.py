@@ -643,41 +643,20 @@ with tab_info:
         placeholder="Ex: 3TVXtAsR1Inumwj472S9r4 ou https://open.spotify.com/artist/...",
     )
 
-    if not st.session_state.get("info_pending"):
-        if st.button("Buscar Gêneros"):
-            if not artist_input.strip():
-                st.warning("Informe um Artist ID ou URL do Spotify.")
-            else:
-                st.session_state.info_pending = True
-                st.session_state.info_artist = artist_input.strip()
-                st.rerun()
-    else:
-        artista_id = st.session_state.info_artist
-        st.info(f"Vai buscar os gêneros do artista: `{artista_id}`")
-        confirmar, cancelar = _confirm_buttons("info")
-
-        if cancelar:
-            st.session_state.info_pending = False
-            st.rerun()
-
-        if confirmar:
-            st.session_state.info_pending = False
-            result = None
-            with st.status("Buscando artista...", expanded=True) as status:
-                try:
-                    result = run_info(sp, artista_id)
-                    status.update(label=f"Artista encontrado!", state="complete", expanded=False)
-                except Exception as exc:
-                    status.update(label="Erro ao buscar artista", state="error")
-                    st.error(f"Detalhe: {exc}")
-
-            if result:
+    if st.button("Buscar Gêneros"):
+        if not artist_input.strip():
+            st.warning("Informe um Artist ID ou URL do Spotify.")
+        else:
+            try:
+                result = run_info(sp, artist_input.strip())
                 st.markdown(f"### {result['name']}")
                 if result["genres"]:
                     st.markdown(" · ".join(f"`{g}`" for g in result["genres"]))
                 else:
-                    st.info("Nenhum gênero encontrado para este artista.")
-                st.caption(f"Campos retornados pela API: {result.get('_raw_keys', [])}")
+                    st.warning("Nenhum gênero encontrado para este artista.")
+                st.caption(f"Campos da API: {result.get('_raw_keys', [])}")
+            except Exception as exc:
+                st.error(f"Erro: {exc}")
 
 # ── EXPORTAR ──────────────────────────────────────────────────────────────────
 with tab_genres:
