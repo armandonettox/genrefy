@@ -81,6 +81,7 @@ st.markdown("""
     font-weight: 700;
     letter-spacing: 0.5px;
     padding: 10px 28px;
+    white-space: nowrap;
     transition: background-color 0.15s ease, transform 0.1s ease;
   }
   .stButton > button:hover {
@@ -123,6 +124,7 @@ st.markdown("""
     border-radius: 500px !important;
     font-weight: 700 !important;
     padding: 12px 32px !important;
+    white-space: nowrap !important;
   }
 
   /* Container centralizado -- sem scroll na pagina, somente as tabs scrollam */
@@ -137,7 +139,7 @@ st.markdown("""
     padding-bottom: 0 !important;
     max-width: 860px !important;
     height: calc(100vh - 60px) !important;
-    overflow: hidden !important;
+    overflow-y: auto !important;
     display: flex !important;
     flex-direction: column !important;
   }
@@ -372,9 +374,9 @@ tab_sync, tab_check, tab_info, tab_genres = st.tabs(
 # --- helpers de UX compartilhados ---
 def _confirm_buttons(key_prefix):
     """Retorna (confirmar, cancelar) usando colunas centradas."""
-    _, c1, c2, _ = st.columns([3, 1, 1, 3])
-    confirmar = c1.button("Confirmar", type="primary", key=f"{key_prefix}_confirmar")
-    cancelar  = c2.button("Cancelar",                  key=f"{key_prefix}_cancelar")
+    _, c1, c2, _ = st.columns([2, 3, 3, 2])
+    confirmar = c1.button("Confirmar", type="primary", key=f"{key_prefix}_confirmar", use_container_width=True)
+    cancelar  = c2.button("Cancelar",                  key=f"{key_prefix}_cancelar",  use_container_width=True)
     return confirmar, cancelar
 
 # ── SINCRONIZAR ───────────────────────────────────────────────────────────────
