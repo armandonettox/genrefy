@@ -21,7 +21,7 @@ def _remove_all_playlist_tracks(sp, pid):
     """Remove todas as faixas de uma playlist em lotes de 100."""
     while True:
         results = sp.playlist_items(pid, limit=100, fields='items(track(uri)),next')
-        uris = [item['track']['uri'] for item in results['items'] if item['track']]
+        uris = [item['track']['uri'] for item in results['items'] if item.get('track')]
         if not uris:
             break
         sp.playlist_remove_all_occurrences_of_items(pid, uris)

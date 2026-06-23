@@ -560,8 +560,10 @@ with tab_sync:
                     )
                     status.update(label="Sincronização concluída!", state="complete", expanded=False)
                 except Exception as exc:
+                    import traceback
                     status.update(label="Erro durante a sincronização", state="error")
-                    st.error(f"Detalhe: {exc}")
+                    status.write(f"**Erro:** {exc}")
+                    status.write(traceback.format_exc())
                     summary = {}
 
             if summary:
