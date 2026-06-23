@@ -329,6 +329,32 @@ def save_aliases(user_id: str, aliases: dict) -> None:
         logger.warning(f'Erro ao salvar aliases: {e}')
 
 
+def _playlist_config_path(user_id: str) -> Path:
+    return _CACHE_DIR / f'playlists_{user_id}.json'
+
+
+def load_playlist_config(user_id: str) -> list[dict] | None:
+    path = _playlist_config_path(user_id)
+    try:
+        if not path.exists():
+            return None
+        return json.loads(path.read_text(encoding='utf-8')).get('playlists')
+    except Exception as e:
+        logger.warning(f'Erro ao ler config de playlists: {e}')
+        return None
+
+
+def save_playlist_config(user_id: str, playlists: list[dict]) -> None:
+    try:
+        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        _playlist_config_path(user_id).write_text(
+            json.dumps({'playlists': playlists}, ensure_ascii=False, indent=2),
+            encoding='utf-8',
+        )
+    except Exception as e:
+        logger.warning(f'Erro ao salvar config de playlists: {e}')
+
+
 def clear_artist_cache(user_id: str) -> None:
     path = _artist_cache_path(user_id)
     try:

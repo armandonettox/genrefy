@@ -49,6 +49,7 @@ from spotify_client import (
     save_aliases,
     save_artist_cache,
     save_overrides,
+    save_playlist_config,
     save_sync_snapshot,
 )
 
@@ -647,6 +648,7 @@ with tab_sync:
         # Calcula o plano uma vez e armazena no session_state para nao recalcular a cada rerun
         if "sync_plan" not in st.session_state:
             _uid_plan = st.session_state.get('library_user_id', 'unknown')
+            save_playlist_config(_uid_plan, selected)
             with st.spinner("Calculando preview..."):
                 try:
                     st.session_state.sync_plan = plan_reload(

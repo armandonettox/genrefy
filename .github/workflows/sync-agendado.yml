@@ -1,0 +1,23 @@
+name: Sync genrefy agendado
+
+on:
+  schedule:
+    # toda manha as 06:00 UTC (03:00 horario de Brasilia)
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync playlists via container
+        env:
+          SPOTIFY_REFRESH_TOKEN: ${{ secrets.SPOTIFY_REFRESH_TOKEN }}
+        run: |
+          podman exec \
+            -e SPOTIFY_REFRESH_TOKEN="$SPOTIFY_REFRESH_TOKEN" \
+            genrefy \
+            python sync_cli.py
