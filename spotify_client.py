@@ -17,7 +17,9 @@
 import json
 import logging
 import os
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import requests
@@ -120,44 +122,62 @@ _MB_MIN_SCORE = 85
 _MB_MAX_TAGS = 5
 
 
+_MB_WORKERS = 3
+_MB_SLEEP = 1.5  # segundos entre requisicoes por thread
+
+
 def _get_genres_from_musicbrainz(session: requests.Session, artist_name: str) -> list[str]:
-    try:
-        r = session.get(
-            'https://musicbrainz.org/ws/2/artist/',
-            params={'query': f'artist:"{artist_name}"', 'limit': 1, 'fmt': 'json'},
-            timeout=10,
-        )
-        r.raise_for_status()
-        data = r.json()
-        artists = data.get('artists', [])
-        if not artists or artists[0].get('score', 0) < _MB_MIN_SCORE:
-            return []
-        tags = artists[0].get('tags', [])
-        tags_sorted = sorted(tags, key=lambda t: t.get('count', 0), reverse=True)
-        return [t['name'] for t in tags_sorted[:_MB_MAX_TAGS]]
-    except Exception as e:
-        logger.warning(f'MusicBrainz erro para {artist_name!r}: {e}')
-        return []
+    for attempt in range(3):
+        try:
+            r = session.get(
+                'https://musicbrainz.org/ws/2/artist/',
+                params={'query': f'artist:"{artist_name}"', 'limit': 1, 'fmt': 'json'},
+                timeout=10,
+            )
+            if r.status_code == 503:
+                time.sleep(2 ** attempt)
+                continue
+            r.raise_for_status()
+            data = r.json()
+            artists = data.get('artists', [])
+            if not artists or artists[0].get('score', 0) < _MB_MIN_SCORE:
+                return []
+            tags = artists[0].get('tags', [])
+            tags_sorted = sorted(tags, key=lambda t: t.get('count', 0), reverse=True)
+            return [t['name'] for t in tags_sorted[:_MB_MAX_TAGS]]
+        except Exception as e:
+            logger.warning(f'MusicBrainz erro para {artist_name!r} (tentativa {attempt + 1}): {e}')
+    return []
 
 
 def _enrich_artists_with_genres(artists: list[dict], on_progress=None) -> list[dict]:
-    """Busca generos no MusicBrainz para artistas com genres vazio no Spotify."""
+    """Busca generos no MusicBrainz em paralelo para artistas sem genero."""
     to_enrich = [a for a in artists if not a.get('genres')]
     if not to_enrich:
         return artists
 
-    session = requests.Session()
-    session.headers['User-Agent'] = _MB_USER_AGENT
-
     enriched_map: dict[str, list[str]] = {}
     total = len(to_enrich)
-    for i, artist in enumerate(to_enrich):
-        name = artist.get('name', '')
-        enriched_map[artist['id']] = _get_genres_from_musicbrainz(session, name)
-        logger.info(f'MusicBrainz {i + 1}/{total}: {name!r} -> {enriched_map[artist["id"]]}')
-        if on_progress:
-            on_progress(i + 1, total)
-        time.sleep(1.1)
+    done_count = [0]
+    lock = threading.Lock()
+
+    def fetch(artist: dict) -> tuple[str, list[str]]:
+        session = requests.Session()
+        session.headers['User-Agent'] = _MB_USER_AGENT
+        genres = _get_genres_from_musicbrainz(session, artist.get('name', ''))
+        time.sleep(_MB_SLEEP)
+        return artist['id'], genres
+
+    with ThreadPoolExecutor(max_workers=_MB_WORKERS) as executor:
+        futures = {executor.submit(fetch, a): a for a in to_enrich}
+        for future in as_completed(futures):
+            aid, genres = future.result()
+            enriched_map[aid] = genres
+            with lock:
+                done_count[0] += 1
+                logger.info(f'MusicBrainz {done_count[0]}/{total}: {genres}')
+                if on_progress:
+                    on_progress(done_count[0], total)
 
     return [
         {**a, 'genres': enriched_map.get(a['id'], a.get('genres', []))}
