@@ -64,14 +64,14 @@ def _filter_tracks_for_playlist(playlist: dict, decorated_tracks: list[dict], al
     return filtered
 
 
-def plan_reload(sp, playlists: list[dict], cached_tracks=None, artist_map=None, aliases=None) -> dict:
+def plan_reload(sp, playlists: list[dict], cached_tracks=None, artist_map=None, aliases=None, multi_artist=False) -> dict:
     """
     Calcula o diff de cada playlist sem modificar nada no Spotify.
     Retorna {nome: {'pid': str, 'add': [uri], 'remove': [uri], 'keep': int, 'current': [uri]}}.
     'current' contem as URIs atuais da playlist em ordem (usado para snapshot de undo).
     """
     tracks = cached_tracks if cached_tracks is not None else get_saved_tracks(sp)
-    decorated = decorate_artist_genres(sp, tracks, artist_map=artist_map)
+    decorated = decorate_artist_genres(sp, tracks, artist_map=artist_map, multi_artist=multi_artist)
 
     result = {}
     for playlist in playlists:
@@ -93,7 +93,7 @@ def plan_reload(sp, playlists: list[dict], cached_tracks=None, artist_map=None, 
     return result
 
 
-def run_reload(sp, playlists, progress_callback=None, cached_tracks=None, artist_map=None, plan=None, aliases=None) -> tuple[list[str], dict]:
+def run_reload(sp, playlists, progress_callback=None, cached_tracks=None, artist_map=None, plan=None, aliases=None, multi_artist=False) -> tuple[list[str], dict]:
     """
     Sincroniza playlists de forma incremental: remove apenas o que saiu, adiciona apenas o que entrou.
     Se plan for fornecido (de plan_reload), usa o diff pre-calculado sem chamadas extras a API.
@@ -110,7 +110,7 @@ def run_reload(sp, playlists, progress_callback=None, cached_tracks=None, artist
     tracks = cached_tracks if cached_tracks is not None else get_saved_tracks(sp)
     log(f'Successfully loaded {len(tracks)} songs')
 
-    decorated = decorate_artist_genres(sp, tracks, progress_callback=log, artist_map=artist_map)
+    decorated = decorate_artist_genres(sp, tracks, progress_callback=log, artist_map=artist_map, multi_artist=multi_artist)
 
     no_genre = sum(1 for t in decorated if not t['genres'])
     log(f'{no_genre}/{len(decorated)} tracks sem genero (artistas sem dados no Spotify)')

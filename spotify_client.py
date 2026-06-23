@@ -441,7 +441,7 @@ def get_library_genres_and_artists(sp: spotipy.Spotify) -> tuple[list[str], list
     return all_genres, all_artists
 
 
-def decorate_artist_genres(sp: spotipy.Spotify, tracks: list[dict], progress_callback=None, artist_map: dict | None = None) -> list[dict]:
+def decorate_artist_genres(sp: spotipy.Spotify, tracks: list[dict], progress_callback=None, artist_map: dict | None = None, multi_artist: bool = False) -> list[dict]:
     if artist_map is None:
         if progress_callback:
             progress_callback('Buscando generos dos artistas...')
@@ -450,10 +450,19 @@ def decorate_artist_genres(sp: spotipy.Spotify, tracks: list[dict], progress_cal
 
     decorated = []
     for track in tracks:
-        artist_id = track['track']['artists'][0]['id']
+        if multi_artist:
+            genres: set[str] = set()
+            for a in track['track']['artists']:
+                aid = a.get('id')
+                if aid:
+                    genres.update(artist_map.get(aid, []))
+            track_genres = list(genres)
+        else:
+            artist_id = track['track']['artists'][0].get('id', '')
+            track_genres = list(artist_map.get(artist_id, []))
         decorated.append({
             **track,
-            'genres': list(artist_map.get(artist_id, [])),
+            'genres': track_genres,
         })
 
     logger.info('Dados de artistas e generos carregados com sucesso')

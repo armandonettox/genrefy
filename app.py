@@ -392,8 +392,8 @@ if not st.session_state.get("library_genres_ok", True) and not st.session_state.
             st.session_state.pop(_k, None)
         st.rerun()
 
-tab_sync, tab_check, tab_info, tab_genres = st.tabs(
-    ["Sincronizar", "Artistas", "Buscar", "Exportar"]
+tab_sync, tab_check, tab_info, tab_genres, tab_stats = st.tabs(
+    ["Sincronizar", "Artistas", "Buscar", "Exportar", "Stats"]
 )
 
 # --- helpers de UX compartilhados ---
@@ -406,6 +406,14 @@ def _confirm_buttons(key_prefix):
 
 # ── SINCRONIZAR ───────────────────────────────────────────────────────────────
 with tab_sync:
+    st.session_state.setdefault('multi_artist', False)
+    st.session_state['multi_artist'] = st.checkbox(
+        "Considerar todos os artistas das faixas (colabs)",
+        value=st.session_state['multi_artist'],
+        help="Quando ativado, faixas com colab herdam os generos de todos os artistas, nao apenas o principal.",
+        key="chk_multi_artist",
+    )
+
     if 'config_playlists' not in st.session_state:
         st.session_state.config_playlists = [
             {
@@ -647,6 +655,7 @@ with tab_sync:
                         cached_tracks=st.session_state.get('library_tracks'),
                         artist_map=_build_artist_map(_uid_plan),
                         aliases=load_aliases(_uid_plan),
+                        multi_artist=st.session_state.get('multi_artist', False),
                     )
                 except Exception as _exc:
                     st.error(f"Erro ao calcular preview: {_exc}")
@@ -696,6 +705,7 @@ with tab_sync:
                         artist_map=_build_artist_map(_uid),
                         plan=_plan,
                         aliases=load_aliases(_uid),
+                        multi_artist=st.session_state.get('multi_artist', False),
                     )
                     status.update(label="Sincronizacao concluida!", state="complete", expanded=False)
                 except Exception as exc:
@@ -886,6 +896,51 @@ with tab_genres:
                     file_name="artists_genres.csv",
                     mime="text/csv",
                 )
+
+# ── STATS ─────────────────────────────────────────────────────────────────────
+with tab_stats:
+    st.subheader("Estatisticas do acervo")
+
+    _cached_artists = load_artist_cache(st.session_state.get("library_user_id", "unknown")) or []
+    _artist_map_stats = _build_artist_map(st.session_state.get("library_user_id", "unknown"))
+
+    if not _cached_artists:
+        st.info("Carregue as musicas curtidas na aba Artistas para ver as estatisticas.")
+    else:
+        _total_artists = len(_cached_artists)
+        _with_genre = sum(1 for a in _cached_artists if a.get("genres"))
+        _coverage_pct = int(_with_genre / _total_artists * 100) if _total_artists else 0
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Artistas", _total_artists)
+        c2.metric("Com genero", _with_genre)
+        c3.metric("Cobertura", f"{_coverage_pct}%")
+
+        # Frequencia de generos
+        _genre_counts: dict[str, int] = {}
+        for _a in _cached_artists:
+            _genres_a = _artist_map_stats.get(_a.get("id", ""), _a.get("genres", [])) if _artist_map_stats else _a.get("genres", [])
+            for _g in _genres_a:
+                _genre_counts[_g] = _genre_counts.get(_g, 0) + 1
+
+        if _genre_counts:
+            _top_genres = sorted(_genre_counts.items(), key=lambda x: -x[1])[:20]
+            st.markdown("**Top 20 generos (por numero de artistas)**")
+            st.bar_chart(
+                pd.DataFrame(_top_genres, columns=["Genero", "Artistas"]).set_index("Genero")
+            )
+
+        # Faixas curtidas com cobertura de genero
+        _tracks = st.session_state.get("library_tracks")
+        if _tracks and _artist_map_stats:
+            _covered = sum(
+                1 for t in _tracks
+                if any(
+                    _artist_map_stats.get(a.get("id", ""))
+                    for a in t["track"]["artists"]
+                )
+            )
+            st.metric("Faixas curtidas com genero", f"{_covered}/{len(_tracks)}")
 
 # ── ENRIQUECIMENTO AUTOMATICO DE GENEROS ──────────────────────────────────────
 if st.session_state.get("auto_enrich"):
