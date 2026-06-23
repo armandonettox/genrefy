@@ -509,10 +509,11 @@ with tab_sync:
 
                 col1, col2, col3 = st.columns(3)
                 with col1:
+                    _lib = set(st.session_state.library_genres)
                     st.multiselect(
                         "Gêneros",
                         options=st.session_state.library_genres,
-                        default=playlist.get('genres', []),
+                        default=[g for g in playlist.get('genres', []) if g in _lib],
                         key=f"cfg_{i}_genres",
                         help="Gêneros que entram nesta playlist.",
                     )
@@ -520,15 +521,16 @@ with tab_sync:
                     st.multiselect(
                         "Excluir gêneros",
                         options=st.session_state.library_genres,
-                        default=playlist.get('ngenres', []),
+                        default=[g for g in playlist.get('ngenres', []) if g in _lib],
                         key=f"cfg_{i}_ngenres",
                         help="Gêneros excluídos com precedência absoluta.",
                     )
                 with col3:
+                    _lib_artists = set(st.session_state.library_artists)
                     st.multiselect(
                         "Forçar artistas",
                         options=st.session_state.library_artists,
-                        default=playlist.get('aoverride', []),
+                        default=[a for a in playlist.get('aoverride', []) if a in _lib_artists],
                         key=f"cfg_{i}_aoverride",
                         help="Artista entra independente do gênero.",
                     )
