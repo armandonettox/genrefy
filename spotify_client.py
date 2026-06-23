@@ -277,6 +277,58 @@ def restore_from_snapshot(sp, snapshot: dict, progress_callback=None) -> None:
             sp.playlist_add_items(pid, uris[i:i + chunk_size])
 
 
+def _overrides_path(user_id: str) -> Path:
+    return _CACHE_DIR / f'overrides_{user_id}.json'
+
+
+def load_overrides(user_id: str) -> dict:
+    """Retorna {artist_id: [genres]} com overrides manuais do usuario."""
+    path = _overrides_path(user_id)
+    try:
+        if not path.exists():
+            return {}
+        return json.loads(path.read_text(encoding='utf-8'))
+    except Exception as e:
+        logger.warning(f'Erro ao ler overrides: {e}')
+        return {}
+
+
+def save_overrides(user_id: str, overrides: dict) -> None:
+    try:
+        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        _overrides_path(user_id).write_text(
+            json.dumps(overrides, ensure_ascii=False, indent=2), encoding='utf-8'
+        )
+    except Exception as e:
+        logger.warning(f'Erro ao salvar overrides: {e}')
+
+
+def _aliases_path(user_id: str) -> Path:
+    return _CACHE_DIR / f'aliases_{user_id}.json'
+
+
+def load_aliases(user_id: str) -> dict:
+    """Retorna {genero: [sinonimos]} para expansao na filtragem."""
+    path = _aliases_path(user_id)
+    try:
+        if not path.exists():
+            return {}
+        return json.loads(path.read_text(encoding='utf-8'))
+    except Exception as e:
+        logger.warning(f'Erro ao ler aliases: {e}')
+        return {}
+
+
+def save_aliases(user_id: str, aliases: dict) -> None:
+    try:
+        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        _aliases_path(user_id).write_text(
+            json.dumps(aliases, ensure_ascii=False, indent=2), encoding='utf-8'
+        )
+    except Exception as e:
+        logger.warning(f'Erro ao salvar aliases: {e}')
+
+
 def clear_artist_cache(user_id: str) -> None:
     path = _artist_cache_path(user_id)
     try:

@@ -41,10 +41,14 @@ from spotify_client import (
     get_saved_tracks,
     get_user_playlists,
     is_authenticated,
+    load_aliases,
     load_artist_cache,
+    load_overrides,
     load_sync_snapshot,
     restore_from_snapshot,
+    save_aliases,
     save_artist_cache,
+    save_overrides,
     save_sync_snapshot,
 )
 
@@ -217,6 +221,16 @@ def save_playlists_to_volume(playlists: list[dict]) -> None:
     USER_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(USER_CONFIG_PATH, 'w', encoding='utf-8') as f:
         json.dump({'playlists': playlists}, f, ensure_ascii=False, indent=2)
+
+
+def _build_artist_map(user_id: str) -> dict | None:
+    """Monta artist_map do cache com overrides manuais aplicados por cima."""
+    cached = load_artist_cache(user_id)
+    if not cached:
+        return None
+    artist_map = {a['id']: a.get('genres', []) for a in cached}
+    artist_map.update(load_overrides(user_id))
+    return artist_map or None
 
 
 if "auth_manager" not in st.session_state:
@@ -554,6 +568,38 @@ with tab_sync:
                         st.session_state.reload_pending = True
                         st.rerun()
 
+        # Mapeamento de generos (aliases / sinonimos)
+        with st.expander("Mapeamento de generos (sinonimos)", expanded=False):
+            st.caption(
+                "Quando uma playlist inclui o genero A e um artista tem o genero B, "
+                "voce pode dizer que B e sinonimo de A. "
+                "Exemplo: 'hip hop' como sinonimo de 'rap'."
+            )
+            _uid_al = st.session_state.get('library_user_id', 'unknown')
+            _aliases_current = load_aliases(_uid_al)
+            _alias_rows = [
+                {"Genero da playlist": k, "Sinonimos (virgula)": ", ".join(v)}
+                for k, v in _aliases_current.items()
+            ]
+            _alias_df = pd.DataFrame(
+                _alias_rows if _alias_rows else [{"Genero da playlist": "", "Sinonimos (virgula)": ""}]
+            )
+            _alias_edited = st.data_editor(
+                _alias_df,
+                num_rows="dynamic",
+                use_container_width=True,
+                key="aliases_editor",
+            )
+            if st.button("Salvar mapeamento", key="btn_save_aliases"):
+                _new_aliases = {}
+                for _, _row in _alias_edited.iterrows():
+                    _genre = str(_row["Genero da playlist"]).strip()
+                    _syns = [s.strip() for s in str(_row["Sinonimos (virgula)"]).split(",") if s.strip()]
+                    if _genre and _syns:
+                        _new_aliases[_genre] = _syns
+                save_aliases(_uid_al, _new_aliases)
+                st.toast("Mapeamento de generos salvo!")
+
         # Undo: mostra botao se houver snapshot de sincronizacao anterior
         _uid_undo = st.session_state.get('library_user_id', 'unknown')
         _snapshot = load_sync_snapshot(_uid_undo)
@@ -592,17 +638,15 @@ with tab_sync:
 
         # Calcula o plano uma vez e armazena no session_state para nao recalcular a cada rerun
         if "sync_plan" not in st.session_state:
-            _cached_artists_p = st.session_state.get('library_loaded') and load_artist_cache(
-                st.session_state.get('library_user_id', 'unknown')
-            )
-            _artist_map_p = {a['id']: a.get('genres', []) for a in (_cached_artists_p or [])} or None
+            _uid_plan = st.session_state.get('library_user_id', 'unknown')
             with st.spinner("Calculando preview..."):
                 try:
                     st.session_state.sync_plan = plan_reload(
                         sp,
                         selected,
                         cached_tracks=st.session_state.get('library_tracks'),
-                        artist_map=_artist_map_p,
+                        artist_map=_build_artist_map(_uid_plan),
+                        aliases=load_aliases(_uid_plan),
                     )
                 except Exception as _exc:
                     st.error(f"Erro ao calcular preview: {_exc}")
@@ -644,15 +688,14 @@ with tab_sync:
 
             with st.status("Sincronizando...", expanded=True) as status:
                 try:
-                    _cached_artists = st.session_state.get('library_loaded') and load_artist_cache(_uid)
-                    _artist_map = {a['id']: a.get('genres', []) for a in (_cached_artists or [])} or None
                     _, summary = run_reload(
                         sp,
                         selected,
                         progress_callback=status.write,
                         cached_tracks=st.session_state.get('library_tracks'),
-                        artist_map=_artist_map,
+                        artist_map=_build_artist_map(_uid),
                         plan=_plan,
+                        aliases=load_aliases(_uid),
                     )
                     status.update(label="Sincronizacao concluida!", state="complete", expanded=False)
                 except Exception as exc:
@@ -742,6 +785,31 @@ with tab_info:
         else:
             st.warning("Nenhum genero encontrado para este artista.")
         st.caption(f"Campos da API: {_r.get('_raw_keys', [])}")
+
+        _uid_ov = st.session_state.get('library_user_id', 'unknown')
+        _overrides_all = load_overrides(_uid_ov)
+        _artist_id_ov = _r.get('id', '')
+        _active_override = _overrides_all.get(_artist_id_ov)
+
+        with st.expander("Definir override de generos", expanded=_active_override is not None):
+            if _active_override is not None:
+                st.caption("Override ativo para este artista.")
+            _ov_input = st.text_input(
+                "Generos (separados por virgula)",
+                value=", ".join(_active_override if _active_override is not None else _r.get("genres", [])),
+                key="buscar_override_input",
+            )
+            _col_save, _col_del = st.columns(2)
+            if _col_save.button("Salvar override", key="btn_save_override", use_container_width=True):
+                _new_genres = [g.strip() for g in _ov_input.split(",") if g.strip()]
+                _overrides_all[_artist_id_ov] = _new_genres
+                save_overrides(_uid_ov, _overrides_all)
+                st.toast(f"Override salvo para {_r['name']}.")
+            if _active_override is not None and _col_del.button("Remover override", key="btn_del_override", use_container_width=True):
+                _overrides_all.pop(_artist_id_ov, None)
+                save_overrides(_uid_ov, _overrides_all)
+                st.toast("Override removido.")
+                st.rerun()
 
     artist_input = st.text_input(
         "Artist ID ou URL do Spotify",

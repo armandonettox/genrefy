@@ -47,4 +47,4 @@ def run_info(sp, artist_input: str) -> dict:
     if not genres:
         genres = get_genres_from_musicbrainz(data['name'])
 
-    return {'name': data['name'], 'genres': genres, '_raw_keys': list(data.keys())}
+    return {'id': artist_id, 'name': data['name'], 'genres': genres, '_raw_keys': list(data.keys())}
