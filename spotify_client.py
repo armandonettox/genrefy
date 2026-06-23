@@ -86,7 +86,7 @@ def create_auth_manager() -> SpotifyOAuth:
 
 
 def create_spotify_client(auth_manager: SpotifyOAuth) -> spotipy.Spotify:
-    return spotipy.Spotify(auth_manager=auth_manager, requests_timeout=15, retries=1)
+    return spotipy.Spotify(auth_manager=auth_manager, requests_timeout=10, retries=0)
 
 
 def is_authenticated(auth_manager: SpotifyOAuth) -> bool:
@@ -211,7 +211,7 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_cal
                 msg = f'sp.artists() HTTP {e.http_status}: {e}'
                 errors.append(msg)
                 logger.warning(msg)
-                if e.http_status in (400, 403):
+                if e.http_status in (400, 403, 429):
                     logger.warning('Alternando para chamadas individuais')
                     use_individual = True
             except Exception as e:
