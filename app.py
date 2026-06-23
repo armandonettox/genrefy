@@ -285,17 +285,6 @@ if not st.session_state.get('library_loaded'):
     else:
         _tracks_in_state = st.session_state.library_tracks or []
         _artists = extract_artists_from_tracks(_tracks_in_state)
-
-        _enrich = st.session_state.pop('enrich_with_mb', False)
-        if _enrich and _artists:
-            _bar2 = st.empty()
-
-            def _on_mb_progress(done: int, total: int):
-                _bar2.progress(done / total, text=f'Buscando generos (MusicBrainz): {done} / {total}')
-
-            _artists = enrich_artists_with_genres(_artists, on_progress=_on_mb_progress)
-            _bar2.empty()
-
         if _artists:
             save_artist_cache(_user_id, _artists)
 
@@ -303,6 +292,8 @@ if not st.session_state.get('library_loaded'):
     st.session_state.library_artists = sorted({a['name'] for a in _artists})
     st.session_state.library_loaded = True
     st.session_state.library_genres_ok = bool(st.session_state.library_genres)
+    if not st.session_state.library_genres_ok:
+        st.session_state.auto_enrich = True
 
 if 'spotify_playlists' not in st.session_state:
     with st.spinner("Carregando suas playlists do Spotify..."):
@@ -363,14 +354,14 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-if not st.session_state.get("library_genres_ok", True):
+_genre_status_ph = st.empty()
+
+if not st.session_state.get("library_genres_ok", True) and not st.session_state.get("auto_enrich"):
     _c1, _c2 = st.columns([5, 1])
-    _c1.warning("Generos nao carregados. Clique em Recarregar para buscar via MusicBrainz (pode demorar alguns minutos).")
+    _c1.warning("Generos nao encontrados. Clique em Recarregar para tentar novamente.")
     if _c2.button("Recarregar", key="retry_genres"):
         clear_artist_cache(st.session_state.get("library_user_id", "unknown"))
-        st.session_state.enrich_with_mb = True
-        for _k in ("library_loaded", "library_genres_ok", "library_genres", "library_artists",
-                   "library_tracks", "artist_load_errors", "artist_load_debug"):
+        for _k in ("library_loaded", "library_genres_ok", "library_genres", "library_artists", "library_tracks"):
             st.session_state.pop(_k, None)
         st.rerun()
 
@@ -713,3 +704,21 @@ with tab_genres:
                     mime="text/csv",
                 )
 
+# ── ENRIQUECIMENTO AUTOMATICO DE GENEROS ──────────────────────────────────────
+if st.session_state.get("auto_enrich"):
+    st.session_state.pop("auto_enrich")
+    _uid = st.session_state.get("library_user_id", "unknown")
+    _raw = load_artist_cache(_uid) or []
+    if _raw:
+        with _genre_status_ph.container():
+            _mb_bar = st.progress(0, text="Buscando generos via MusicBrainz...")
+
+        def _on_auto_enrich(done: int, total: int):
+            _mb_bar.progress(done / total, text=f"Buscando generos (MusicBrainz): {done} / {total}")
+
+        _enriched = enrich_artists_with_genres(_raw, on_progress=_on_auto_enrich)
+        save_artist_cache(_uid, _enriched)
+        st.session_state.library_genres = sorted({g for a in _enriched for g in a.get("genres", [])})
+        st.session_state.library_artists = sorted({a["name"] for a in _enriched})
+        st.session_state.library_genres_ok = bool(st.session_state.library_genres)
+        st.rerun()
