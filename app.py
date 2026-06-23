@@ -235,6 +235,10 @@ if st.session_state.auth_error:
         "SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET e SPOTIFY_REDIRECT_URI.\n\n"
         f"Detalhe: {st.session_state.auth_error}"
     )
+    if st.button("Tentar novamente", key="retry_auth"):
+        for _k in ("auth_manager", "auth_error", "playlists"):
+            st.session_state.pop(_k, None)
+        st.rerun()
     st.stop()
 
 auth_manager = st.session_state.auth_manager
@@ -248,6 +252,9 @@ if code and not is_authenticated(auth_manager):
         st.rerun()
     except Exception as e:
         st.error(f"Falha ao completar autenticação: {e}")
+        if st.button("Tentar novamente", key="retry_oauth"):
+            st.query_params.clear()
+            st.rerun()
         st.stop()
 
 # Se não autenticado, mostra o botão de login
@@ -667,6 +674,13 @@ with tab_check:
         "em nenhuma playlist configurada."
     )
 
+    if st.session_state.get("check_error"):
+        st.error(f"Erro na última verificação: {st.session_state.check_error}")
+        if st.button("Tentar novamente", key="retry_check"):
+            st.session_state.pop("check_error", None)
+            st.session_state.check_pending = True
+            st.rerun()
+
     if not st.session_state.get("check_pending"):
         if st.button("Verificar Artistas"):
             st.session_state.check_pending = True
@@ -683,7 +697,6 @@ with tab_check:
             st.rerun()
 
         if confirmar:
-            st.session_state.check_pending = False
             missing = None
             with st.status("Verificando artistas...", expanded=True) as status:
                 try:
@@ -694,8 +707,11 @@ with tab_check:
                     )
                     status.update(label="Verificação concluída!", state="complete", expanded=False)
                 except Exception as exc:
+                    logging.exception("Erro na verificacao de artistas")
                     status.update(label="Erro na verificação", state="error")
-                    st.error(f"Detalhe: {exc}")
+                    st.session_state.check_error = str(exc)
+                finally:
+                    st.session_state.check_pending = False
 
             if missing is not None:
                 if not missing:
@@ -757,6 +773,13 @@ with tab_genres:
         "ordenados alfabeticamente."
     )
 
+    if st.session_state.get("genres_error"):
+        st.error(f"Erro na última exportação: {st.session_state.genres_error}")
+        if st.button("Tentar novamente", key="retry_genres"):
+            st.session_state.pop("genres_error", None)
+            st.session_state.genres_pending = True
+            st.rerun()
+
     if not st.session_state.get("genres_pending"):
         if st.button("Gerar CSV"):
             st.session_state.genres_pending = True
@@ -773,15 +796,17 @@ with tab_genres:
             st.rerun()
 
         if confirmar:
-            st.session_state.genres_pending = False
             output_path = None
             with st.status("Gerando CSV...", expanded=True) as status:
                 try:
                     output_path = run_genres(sp)
                     status.update(label="CSV gerado!", state="complete", expanded=False)
                 except Exception as exc:
+                    logging.exception("Erro ao gerar CSV")
                     status.update(label="Erro ao gerar CSV", state="error")
-                    st.error(f"Detalhe: {exc}")
+                    st.session_state.genres_error = str(exc)
+                finally:
+                    st.session_state.genres_pending = False
 
             if output_path:
                 with open(output_path, encoding="utf-8") as f:
@@ -801,12 +826,24 @@ if st.session_state.get("auto_enrich"):
     _raw = load_artist_cache(_uid) or []
     if _raw:
         with _genre_status_ph.container():
-            _mb_bar = st.progress(0, text="Buscando generos via MusicBrainz...")
+            _mb_bar = st.progress(0, text="Iniciando busca de generos via MusicBrainz...")
+
+        _mb_start = time.time()
 
         def _on_auto_enrich(done: int, total: int):
-            _mb_bar.progress(done / total, text=f"Buscando generos (MusicBrainz): {done} / {total}")
+            elapsed = time.time() - _mb_start
+            if done > 0:
+                eta_s = int((elapsed / done) * (total - done))
+                eta_txt = f"~{eta_s // 60} min" if eta_s >= 60 else f"~{eta_s}s"
+            else:
+                eta_txt = "..."
+            _mb_bar.progress(
+                done / total,
+                text=f"MusicBrainz: {done}/{total} artistas · {eta_txt} restantes"
+            )
 
         _enriched = enrich_artists_with_genres(_raw, on_progress=_on_auto_enrich)
+        _mb_bar.progress(1.0, text=f"Generos encontrados para {len(_enriched)} artistas.")
         save_artist_cache(_uid, _enriched)
         st.session_state.library_genres = sorted({g for a in _enriched for g in a.get("genres", [])})
         st.session_state.library_artists = sorted({a["name"] for a in _enriched})
