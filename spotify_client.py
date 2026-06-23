@@ -165,6 +165,24 @@ def _enrich_artists_with_genres(artists: list[dict], on_progress=None) -> list[d
     ]
 
 
+def extract_artists_from_tracks(tracks: list[dict]) -> list[dict]:
+    """Extrai artistas unicos das tracks sem chamar a API do Spotify."""
+    seen: set[str] = set()
+    artists = []
+    for t in tracks:
+        a = t['track']['artists'][0]
+        aid = a.get('id')
+        if aid and aid not in seen:
+            seen.add(aid)
+            artists.append({'id': aid, 'name': a.get('name', ''), 'genres': []})
+    return artists
+
+
+def enrich_artists_with_genres(artists: list[dict], on_progress=None) -> list[dict]:
+    """Busca generos no MusicBrainz para todos os artistas sem genero."""
+    return _enrich_artists_with_genres(artists, on_progress=on_progress)
+
+
 def get_genres_from_musicbrainz(artist_name: str) -> list[str]:
     session = requests.Session()
     session.headers['User-Agent'] = _MB_USER_AGENT
@@ -283,11 +301,12 @@ def get_library_genres_and_artists(sp: spotipy.Spotify) -> tuple[list[str], list
     return all_genres, all_artists
 
 
-def decorate_artist_genres(sp: spotipy.Spotify, tracks: list[dict], progress_callback=None) -> list[dict]:
-    if progress_callback:
-        progress_callback('Buscando generos dos artistas...')
-    artist_data, _ = get_artists_for_tracks(sp, tracks, progress_callback=progress_callback)
-    artist_map = {a['id']: a.get('genres', []) for a in artist_data}
+def decorate_artist_genres(sp: spotipy.Spotify, tracks: list[dict], progress_callback=None, artist_map: dict | None = None) -> list[dict]:
+    if artist_map is None:
+        if progress_callback:
+            progress_callback('Buscando generos dos artistas...')
+        artist_data, _ = get_artists_for_tracks(sp, tracks, progress_callback=progress_callback)
+        artist_map = {a['id']: a.get('genres', []) for a in artist_data}
 
     decorated = []
     for track in tracks:

@@ -29,7 +29,7 @@ def _remove_all_playlist_tracks(sp, pid):
             break
 
 
-def run_reload(sp, playlists, progress_callback=None, cached_tracks=None) -> tuple[list[str], dict]:
+def run_reload(sp, playlists, progress_callback=None, cached_tracks=None, artist_map=None) -> tuple[list[str], dict]:
     """Retorna (logs, summary). summary e {nome_playlist: contagem_de_tracks}."""
     logs = []
     summary = {}
@@ -43,7 +43,7 @@ def run_reload(sp, playlists, progress_callback=None, cached_tracks=None) -> tup
     tracks = cached_tracks if cached_tracks is not None else get_saved_tracks(sp)
     log(f'Successfully loaded {len(tracks)} songs')
 
-    decorated_tracks = decorate_artist_genres(sp, tracks, progress_callback=log)
+    decorated_tracks = decorate_artist_genres(sp, tracks, progress_callback=log, artist_map=artist_map)
 
     no_genre = sum(1 for t in decorated_tracks if not t['genres'])
     log(f'{no_genre}/{len(decorated_tracks)} tracks sem genero (artistas sem dados no Spotify)')

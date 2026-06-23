@@ -33,7 +33,8 @@ from spotify_client import (
     clear_artist_cache,
     create_auth_manager,
     create_spotify_client,
-    get_artists_for_tracks,
+    enrich_artists_with_genres,
+    extract_artists_from_tracks,
     get_saved_tracks,
     get_user_playlists,
     is_authenticated,
@@ -282,32 +283,18 @@ if not st.session_state.get('library_loaded'):
     if _cached is not None:
         _artists = _cached
     else:
-        _bar2 = st.empty()
-
-        def _on_artists_progress(done: int, total: int):
-            _bar2.progress(done / total, text=f'Carregando artistas: {done} / {total}')
-
-        def _on_mb_progress(done: int, total: int):
-            _bar2.progress(done / total, text=f'Buscando generos (MusicBrainz): {done} / {total}')
-
         _tracks_in_state = st.session_state.library_tracks or []
-        _debug_tracks = len(_tracks_in_state)
+        _artists = extract_artists_from_tracks(_tracks_in_state)
 
         _enrich = st.session_state.pop('enrich_with_mb', False)
-        _artists, _artist_errors = get_artists_for_tracks(
-            sp, _tracks_in_state, on_progress=_on_artists_progress,
-            on_mb_progress=_on_mb_progress, enrich_genres=_enrich,
-        )
-        _bar2.empty()
+        if _enrich and _artists:
+            _bar2 = st.empty()
 
-        st.session_state.artist_load_debug = {
-            'tracks': _debug_tracks,
-            'artists': len(_artists),
-            'errors': _artist_errors[:3] if _artist_errors else [],
-        }
+            def _on_mb_progress(done: int, total: int):
+                _bar2.progress(done / total, text=f'Buscando generos (MusicBrainz): {done} / {total}')
 
-        if _artist_errors:
-            st.session_state.artist_load_errors = _artist_errors[:5]
+            _artists = enrich_artists_with_genres(_artists, on_progress=_on_mb_progress)
+            _bar2.empty()
 
         if _artists:
             save_artist_cache(_user_id, _artists)
@@ -377,10 +364,8 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 if not st.session_state.get("library_genres_ok", True):
-    _debug = st.session_state.get("artist_load_debug", {})
-    _debug_txt = f" | tracks={_debug.get('tracks','?')} artistas={_debug.get('artists','?')} erros={_debug.get('errors','?')}" if _debug else ""
     _c1, _c2 = st.columns([5, 1])
-    _c1.warning(f"Generos nao encontrados pelo Spotify. Clique em Recarregar para buscar via MusicBrainz (pode demorar alguns minutos).{_debug_txt}")
+    _c1.warning("Generos nao carregados. Clique em Recarregar para buscar via MusicBrainz (pode demorar alguns minutos).")
     if _c2.button("Recarregar", key="retry_genres"):
         clear_artist_cache(st.session_state.get("library_user_id", "unknown"))
         st.session_state.enrich_with_mb = True
@@ -571,11 +556,16 @@ with tab_sync:
             st.session_state.reload_pending = False
             with st.status("Sincronizando...", expanded=True) as status:
                 try:
+                    _cached_artists = st.session_state.get('library_loaded') and load_artist_cache(
+                        st.session_state.get('library_user_id', 'unknown')
+                    )
+                    _artist_map = {a['id']: a.get('genres', []) for a in (_cached_artists or [])} or None
                     _, summary = run_reload(
                         sp,
                         selected,
                         progress_callback=status.write,
                         cached_tracks=st.session_state.get('library_tracks'),
+                        artist_map=_artist_map,
                     )
                     status.update(label="Sincronização concluída!", state="complete", expanded=False)
                 except Exception as exc:
