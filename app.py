@@ -293,8 +293,10 @@ if not st.session_state.get('library_loaded'):
         _tracks_in_state = st.session_state.library_tracks or []
         _debug_tracks = len(_tracks_in_state)
 
+        _enrich = st.session_state.pop('enrich_with_mb', False)
         _artists, _artist_errors = get_artists_for_tracks(
-            sp, _tracks_in_state, on_progress=_on_artists_progress, on_mb_progress=_on_mb_progress
+            sp, _tracks_in_state, on_progress=_on_artists_progress,
+            on_mb_progress=_on_mb_progress, enrich_genres=_enrich,
         )
         _bar2.empty()
 
@@ -378,9 +380,10 @@ if not st.session_state.get("library_genres_ok", True):
     _debug = st.session_state.get("artist_load_debug", {})
     _debug_txt = f" | tracks={_debug.get('tracks','?')} artistas={_debug.get('artists','?')} erros={_debug.get('errors','?')}" if _debug else ""
     _c1, _c2 = st.columns([5, 1])
-    _c1.warning(f"Generos nao encontrados. Clique em Recarregar para buscar via MusicBrainz.{_debug_txt}")
+    _c1.warning(f"Generos nao encontrados pelo Spotify. Clique em Recarregar para buscar via MusicBrainz (pode demorar alguns minutos).{_debug_txt}")
     if _c2.button("Recarregar", key="retry_genres"):
         clear_artist_cache(st.session_state.get("library_user_id", "unknown"))
+        st.session_state.enrich_with_mb = True
         for _k in ("library_loaded", "library_genres_ok", "library_genres", "library_artists",
                    "library_tracks", "artist_load_errors", "artist_load_debug"):
             st.session_state.pop(_k, None)

@@ -181,7 +181,7 @@ def clear_artist_cache(user_id: str) -> None:
         logger.warning(f'Erro ao remover cache de artistas: {e}')
 
 
-def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_callback=None, on_progress=None, on_mb_progress=None) -> tuple[list[dict], list[str]]:
+def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_callback=None, on_progress=None, on_mb_progress=None, enrich_genres: bool = False) -> tuple[list[dict], list[str]]:
     """Retorna (artistas, erros). erros e uma lista de strings descrevendo falhas."""
     seen = set()
     artist_ids = []
@@ -240,7 +240,8 @@ def get_artists_for_tracks(sp: spotipy.Spotify, tracks: list[dict], progress_cal
 
     logger.info(f'Artistas carregados: {len(artists)}/{total}')
 
-    artists = _enrich_artists_with_genres(artists, on_progress=on_mb_progress or on_progress)
+    if enrich_genres:
+        artists = _enrich_artists_with_genres(artists, on_progress=on_mb_progress or on_progress)
 
     return artists, errors
 
