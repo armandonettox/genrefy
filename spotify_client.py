@@ -77,10 +77,22 @@ def create_auth_manager() -> SpotifyOAuth:
 
     spotify_cfg = config['spotify']
 
+    client_id = os.getenv('SPOTIFY_CLIENT_ID', spotify_cfg.get('client_id', ''))
+    client_secret = os.getenv('SPOTIFY_CLIENT_SECRET', spotify_cfg.get('client_secret', ''))
+    redirect_uri = os.getenv('SPOTIFY_REDIRECT_URI', spotify_cfg.get('redirect_uri', ''))
+
+    missing = [name for name, val in [
+        ('SPOTIFY_CLIENT_ID', client_id),
+        ('SPOTIFY_CLIENT_SECRET', client_secret),
+        ('SPOTIFY_REDIRECT_URI', redirect_uri),
+    ] if not val]
+    if missing:
+        raise ValueError(f"Variável(is) obrigatória(s) não definida(s): {', '.join(missing)}")
+
     return SpotifyOAuth(
-        client_id=os.getenv('SPOTIFY_CLIENT_ID', spotify_cfg.get('client_id', '')),
-        client_secret=os.getenv('SPOTIFY_CLIENT_SECRET', spotify_cfg.get('client_secret', '')),
-        redirect_uri=os.getenv('SPOTIFY_REDIRECT_URI', spotify_cfg['redirect_uri']),
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uri=redirect_uri,
         scope=' '.join(spotify_cfg['scopes']),
         cache_path=os.getenv('SPOTIFY_TOKEN_CACHE', '.spotify_cache'),
         open_browser=False,
@@ -207,6 +219,62 @@ def get_genres_from_musicbrainz(artist_name: str) -> list[str]:
     session = requests.Session()
     session.headers['User-Agent'] = _MB_USER_AGENT
     return _get_genres_from_musicbrainz(session, artist_name)
+
+
+def _sync_snapshot_path(user_id: str) -> Path:
+    return _CACHE_DIR / f'snapshot_{user_id}.json'
+
+
+def save_sync_snapshot(user_id: str, playlists_uris: dict) -> None:
+    """Salva URIs atuais de cada playlist antes de sincronizar (para undo)."""
+    try:
+        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        path = _sync_snapshot_path(user_id)
+        path.write_text(
+            json.dumps({'timestamp': time.time(), 'playlists': playlists_uris}, ensure_ascii=False),
+            encoding='utf-8',
+        )
+    except Exception as e:
+        logger.warning(f'Erro ao salvar snapshot: {e}')
+
+
+def load_sync_snapshot(user_id: str) -> dict | None:
+    """Retorna {'timestamp': float, 'playlists': {pid: [uri]}} ou None se nao existir."""
+    path = _sync_snapshot_path(user_id)
+    try:
+        if not path.exists():
+            return None
+        return json.loads(path.read_text(encoding='utf-8'))
+    except Exception as e:
+        logger.warning(f'Erro ao ler snapshot: {e}')
+        return None
+
+
+def clear_sync_snapshot(user_id: str) -> None:
+    path = _sync_snapshot_path(user_id)
+    try:
+        if path.exists():
+            path.unlink()
+    except Exception as e:
+        logger.warning(f'Erro ao remover snapshot: {e}')
+
+
+def restore_from_snapshot(sp, snapshot: dict, progress_callback=None) -> None:
+    """Restaura playlists para o estado do snapshot (undo de sincronizacao)."""
+    for pid, uris in snapshot.get('playlists', {}).items():
+        if progress_callback:
+            progress_callback(f'Restaurando playlist {pid}...')
+        while True:
+            results = sp.playlist_items(pid, limit=100, fields='items(track(uri)),next')
+            current = [item['track']['uri'] for item in results['items'] if item.get('track')]
+            if not current:
+                break
+            sp.playlist_remove_all_occurrences_of_items(pid, current)
+            if not results.get('next'):
+                break
+        chunk_size = 100
+        for i in range(0, len(uris), chunk_size):
+            sp.playlist_add_items(pid, uris[i:i + chunk_size])
 
 
 def clear_artist_cache(user_id: str) -> None:

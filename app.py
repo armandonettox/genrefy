@@ -17,7 +17,9 @@
 import base64
 import json
 import logging
+import math
 import os
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -28,9 +30,10 @@ from PIL import Image
 from commands.check import run_check
 from commands.genres import run_genres
 from commands.info import run_info
-from commands.reload import run_reload
+from commands.reload import run_reload, plan_reload
 from spotify_client import (
     clear_artist_cache,
+    clear_sync_snapshot,
     create_auth_manager,
     create_spotify_client,
     enrich_artists_with_genres,
@@ -39,7 +42,10 @@ from spotify_client import (
     get_user_playlists,
     is_authenticated,
     load_artist_cache,
+    load_sync_snapshot,
+    restore_from_snapshot,
     save_artist_cache,
+    save_sync_snapshot,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -278,17 +284,18 @@ if not st.session_state.get('library_loaded'):
         _bar.empty()
 
     # Fase 2: busca dados dos artistas — tenta cache antes de chamar a API
-    _user_id = sp.me().get('id', 'unknown')
-    st.session_state.library_user_id = _user_id
-    _cached = load_artist_cache(_user_id)
+    with st.spinner("Carregando dados dos artistas..."):
+        _user_id = sp.me().get('id', 'unknown')
+        st.session_state.library_user_id = _user_id
+        _cached = load_artist_cache(_user_id)
 
-    if _cached is not None:
-        _artists = _cached
-    else:
-        _tracks_in_state = st.session_state.library_tracks or []
-        _artists = extract_artists_from_tracks(_tracks_in_state)
-        if _artists:
-            save_artist_cache(_user_id, _artists)
+        if _cached is not None:
+            _artists = _cached
+        else:
+            _tracks_in_state = st.session_state.library_tracks or []
+            _artists = extract_artists_from_tracks(_tracks_in_state)
+            if _artists:
+                save_artist_cache(_user_id, _artists)
 
     st.session_state.library_genres = sorted({g for a in _artists for g in a.get('genres', [])})
     st.session_state.library_artists = sorted({a['name'] for a in _artists})
@@ -319,10 +326,7 @@ def do_logout():
     cache_path = os.getenv('SPOTIFY_TOKEN_CACHE', '.spotify_cache')
     if os.path.exists(cache_path):
         os.remove(cache_path)
-    for key in ['sp', 'auth_manager', 'playlists', 'auth_error',
-                'library_loaded', 'library_genres', 'library_artists', 'library_tracks',
-                'library_genres_ok']:
-        st.session_state.pop(key, None)
+    st.session_state.clear()
     st.rerun()
 
 if st.query_params.get("action") == "logout":
@@ -414,9 +418,7 @@ with tab_sync:
         col_list, col_cfg = st.columns([2, 5])
 
         with col_list:
-            if not cfg:
-                st.caption("Nenhuma playlist configurada.")
-            else:
+            if cfg:
                 sel = st.session_state.get("sel_playlist", 0)
                 sel = min(sel, len(cfg) - 1)
 
@@ -457,7 +459,7 @@ with tab_sync:
 
         with col_cfg:
             if not cfg:
-                st.info("Adicione uma playlist para começar.")
+                st.info("Nenhuma playlist ainda. Clique em **+ Adicionar** para criar a primeira.")
             else:
                 i = st.session_state.get("sel_playlist", 0)
                 i = min(i, len(cfg) - 1)
@@ -486,7 +488,7 @@ with tab_sync:
                     )
                 with col2:
                     st.multiselect(
-                        "Excluir",
+                        "Excluir gêneros",
                         options=st.session_state.library_genres,
                         default=playlist.get('ngenres', []),
                         key=f"cfg_{i}_ngenres",
@@ -521,7 +523,11 @@ with tab_sync:
                     _flush_widgets()
                     save_playlists_to_volume(st.session_state.config_playlists)
                     st.session_state.playlists = list(st.session_state.config_playlists)
+                    st.session_state['cfg_saved'] = True
                     st.toast("Configuração salva!")
+
+                if st.session_state.pop('cfg_saved', False):
+                    st.success("Configuração salva!")
 
                 if b4.button("Sincronizar ▶", type="primary", key="cfg_sync"):
                     _flush_widgets()
@@ -531,27 +537,107 @@ with tab_sync:
                     st.session_state.reload_pending = True
                     st.rerun()
 
+                if len(cfg) > 1:
+                    _, _b_all, _ = st.columns([1, 4, 1])
+                    if _b_all.button("Sincronizar todas ▶", key="cfg_sync_all", use_container_width=True):
+                        _flush_widgets()
+                        save_playlists_to_volume(st.session_state.config_playlists)
+                        st.session_state.playlists = list(st.session_state.config_playlists)
+                        st.session_state.sync_selection = list(st.session_state.config_playlists)
+                        st.session_state.reload_pending = True
+                        st.rerun()
+
+        # Undo: mostra botao se houver snapshot de sincronizacao anterior
+        _uid_undo = st.session_state.get('library_user_id', 'unknown')
+        _snapshot = load_sync_snapshot(_uid_undo)
+        if _snapshot:
+            _age_min = int((time.time() - _snapshot.get('timestamp', 0)) / 60)
+            _age_txt = f" (ha {_age_min} min)" if _age_min > 0 else ""
+            st.divider()
+            if not st.session_state.get('undo_pending'):
+                if st.button(f"Desfazer ultima sincronizacao{_age_txt}", key="undo_btn"):
+                    st.session_state.undo_pending = True
+                    st.rerun()
+            else:
+                st.warning(
+                    "Vai restaurar cada playlist ao estado antes da ultima sincronizacao. "
+                    "Essa operacao nao pode ser desfeita."
+                )
+                confirmar_undo, cancelar_undo = _confirm_buttons("undo")
+                if cancelar_undo:
+                    st.session_state.undo_pending = False
+                    st.rerun()
+                if confirmar_undo:
+                    st.session_state.undo_pending = False
+                    with st.status("Desfazendo sincronizacao...", expanded=True) as _undo_status:
+                        try:
+                            restore_from_snapshot(sp, _snapshot, progress_callback=_undo_status.write)
+                            clear_sync_snapshot(_uid_undo)
+                            _undo_status.update(label="Playlists restauradas!", state="complete", expanded=False)
+                            st.success("Feito. Playlists voltaram ao estado anterior.")
+                        except Exception as _exc:
+                            logging.exception("Erro ao desfazer sincronizacao")
+                            _undo_status.update(label="Erro ao restaurar", state="error")
+                            st.error(f"Detalhe: {_exc}")
+
     else:
         selected = st.session_state.get("sync_selection", [])
-        p = selected[0] if selected else {}
-        name = _playlist_name(p.get('id', ''), p.get('name', ''))
 
-        st.markdown(f"**Sincronizar:** {name}")
-        st.warning("Todas as faixas dessa playlist serão removidas e readicionadas.")
+        # Calcula o plano uma vez e armazena no session_state para nao recalcular a cada rerun
+        if "sync_plan" not in st.session_state:
+            _cached_artists_p = st.session_state.get('library_loaded') and load_artist_cache(
+                st.session_state.get('library_user_id', 'unknown')
+            )
+            _artist_map_p = {a['id']: a.get('genres', []) for a in (_cached_artists_p or [])} or None
+            with st.spinner("Calculando preview..."):
+                try:
+                    st.session_state.sync_plan = plan_reload(
+                        sp,
+                        selected,
+                        cached_tracks=st.session_state.get('library_tracks'),
+                        artist_map=_artist_map_p,
+                    )
+                except Exception as _exc:
+                    st.error(f"Erro ao calcular preview: {_exc}")
+                    if st.button("Cancelar", key="cancel_plan_err"):
+                        st.session_state.reload_pending = False
+                        st.rerun()
+                    st.stop()
+
+        sync_plan = st.session_state.sync_plan
+
+        st.markdown("**Preview da sincronizacao:**")
+        _df_rows = [
+            {
+                "Playlist": _n,
+                "+Adicionadas": len(_p['add']),
+                "-Removidas": len(_p['remove']),
+                "=Mantidas": _p['keep'],
+                "Total": _p['keep'] + len(_p['add']),
+            }
+            for _n, _p in sync_plan.items()
+        ]
+        st.dataframe(pd.DataFrame(_df_rows), use_container_width=True, hide_index=True)
 
         confirmar, cancelar = _confirm_buttons("reload")
 
         if cancelar:
             st.session_state.reload_pending = False
+            st.session_state.pop('sync_plan', None)
             st.rerun()
 
         if confirmar:
             st.session_state.reload_pending = False
+            _plan = st.session_state.pop('sync_plan', None)
+
+            # Salva snapshot antes de modificar qualquer playlist
+            _uid = st.session_state.get('library_user_id', 'unknown')
+            if _plan:
+                save_sync_snapshot(_uid, {_p['pid']: _p['current'] for _p in _plan.values()})
+
             with st.status("Sincronizando...", expanded=True) as status:
                 try:
-                    _cached_artists = st.session_state.get('library_loaded') and load_artist_cache(
-                        st.session_state.get('library_user_id', 'unknown')
-                    )
+                    _cached_artists = st.session_state.get('library_loaded') and load_artist_cache(_uid)
                     _artist_map = {a['id']: a.get('genres', []) for a in (_cached_artists or [])} or None
                     _, summary = run_reload(
                         sp,
@@ -559,17 +645,17 @@ with tab_sync:
                         progress_callback=status.write,
                         cached_tracks=st.session_state.get('library_tracks'),
                         artist_map=_artist_map,
+                        plan=_plan,
                     )
-                    status.update(label="Sincronização concluída!", state="complete", expanded=False)
+                    status.update(label="Sincronizacao concluida!", state="complete", expanded=False)
                 except Exception as exc:
-                    import traceback
-                    status.update(label="Erro durante a sincronização", state="error")
-                    status.write(f"**Erro:** {exc}")
-                    status.write(traceback.format_exc())
+                    logging.exception("Erro durante a sincronizacao")
+                    status.update(label="Erro durante a sincronizacao", state="error")
+                    status.write(f"Algo deu errado ao sincronizar. Detalhe: {exc}")
                     summary = {}
 
             if summary:
-                st.success("Concluído!")
+                st.success("Concluido!")
                 for nome, contagem in summary.items():
                     st.markdown(f"**{nome}**: {contagem} faixas")
 

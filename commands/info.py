@@ -14,15 +14,32 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+import re
+
 from spotify_client import get_genres_from_musicbrainz
+
+_SPOTIFY_ID_RE = re.compile(r'^[A-Za-z0-9]{22}$')
+_SPOTIFY_URL_RE = re.compile(r'open\.spotify\.com/artist/([A-Za-z0-9]{22})')
+_SPOTIFY_URI_RE = re.compile(r'^spotify:artist:([A-Za-z0-9]{22})$')
+
+
+def _extract_artist_id(artist_input: str) -> str:
+    m = _SPOTIFY_URL_RE.search(artist_input)
+    if m:
+        return m.group(1)
+    m = _SPOTIFY_URI_RE.match(artist_input)
+    if m:
+        return m.group(1)
+    if _SPOTIFY_ID_RE.match(artist_input):
+        return artist_input
+    raise ValueError(
+        "Entrada inválida. Informe um ID de artista (22 caracteres), "
+        "URL (https://open.spotify.com/artist/...) ou URI (spotify:artist:...)."
+    )
 
 
 def run_info(sp, artist_input: str) -> dict:
-    # Se for URL do Spotify, extrai o ID do artista
-    if artist_input.startswith('https://'):
-        artist_id = artist_input.split('/')[4].split('?')[0]
-    else:
-        artist_id = artist_input
+    artist_id = _extract_artist_id(artist_input)
 
     data = sp.artist(artist_id)
     genres = data.get('genres', [])
